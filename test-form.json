@@ -1,0 +1,62 @@
+{
+  "name": "Customer Feedback",
+  "slug": "customer-feedback",
+  "description": "Share your thoughts with us",
+  "schema": {
+    "version": "1.0",
+    "fields": [
+      {
+        "id": "name",
+        "type": "short_text",
+        "label": "What's your name?",
+        "required": true,
+        "order": 1
+      },
+      {
+        "id": "email",
+        "type": "email",
+        "label": "What's your email?",
+        "required": true,
+        "order": 2
+      },
+      {
+        "id": "rating",
+        "type": "rating",
+        "label": "How would you rate us?",
+        "required": true,
+        "order": 3,
+        "properties": {
+          "scale": 5
+        }
+      },
+      {
+        "id": "feedback",
+        "type": "long_text",
+        "label": "Any additional feedback?",
+        "required": false,
+        "order": 4
+      }
+    ],
+    "theme": {
+      "colors": {
+        "primary": "#4F46E5",
+        "background": "#FFFFFF",
+        "text": "#1F2937",
+        "button": "#4F46E5"
+      },
+      "font": "Inter",
+      "layout": "classic"
+    },
+    "settings": {
+      "allowAnonymous": true,
+      "requireAuth": false,
+      "oneResponsePerUser": false,
+      "showProgressBar": true,
+      "showQuestionNumbers": false,
+      "shuffleQuestions": false,
+      "confirmationMessage": "Thank you for your feedback!",
+      "autoSaveInterval": 30
+    },
+    "logic": []
+  }
+}

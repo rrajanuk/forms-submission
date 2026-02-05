@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(tree:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(for:*)",
+      "Bash(do:*)",
+      "Bash(done:*)",
+      "Read(//c/Users/Robin Rajan/projects/forms-submission/**)",
+      "Bash(npm install:*)",
+      "Bash(pkill:*)",
+      "Bash(npm run migrate:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3ZjZkNWQyZS0xY2Q1LTQwZDMtYTgxOC04YWZiYTAwOGUwNjMiLCJlbWFpbCI6ImFkbWluQGFjbWUuY29tIiwib3JnYW5pemF0aW9uX2lkIjoiODQ2ZmFmNGItMzZiMS00ZDZmLWI4MDMtYjMyNWI2OWZhNTkyIiwicm9sZSI6Im93bmVyIiwiaWF0IjoxNzY5MDYzMzE2LCJleHAiOjE3NjkwNjQyMTZ9.Wsi6ugkxhti3g0wgREgCyiQPN1eRuHpiGUIjGlmNeZ4\")",
+      "Bash(APIKEY=\"fp_HAqtse1ElLbzsSlEKkbrjouK99kOtOnuNwgoTdwKSKQ\")",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3ZjZkNWQyZS0xY2Q1LTQwZDMtYTgxOC04YWZiYTAwOGUwNjMiLCJlbWFpbCI6ImFkbWluQGFjbWUuY29tIiwib3JnYW5pemF0aW9uX2lkIjoiODQ2ZmFmNGItMzZiMS00ZDZmLWI4MDMtYjMyNWI2OWZhNTkyIiwicm9sZSI6Im93bmVyIiwiaWF0IjoxNzY5MDY3MDY3LCJleHAiOjE3NjkwNjc5Njd9.xmPOT88BuO50EJs2vB14NTOYNdRI1V4j4cTENXv0J1c\")",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0OTU4ZDRjMy1iNjdkLTQzNDktYTMyNS1hM2FmMWJkOWI0YTAiLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20iLCJvcmdhbml6YXRpb25faWQiOiJmMzkxMmY5Ni0zNjkyLTQxNmEtYjBjNS0yMjc3YjQwZWRjYWMiLCJyb2xlIjoib3duZXIiLCJpYXQiOjE3NjkwODE5OTUsImV4cCI6MTc2OTA4Mjg5NX0.tR9tFbKGcv2oqxBd9n7THo7rvWDD8BT9_-larX_CrYU\")",
+      "Bash(__NEW_LINE_4357060668297833__ curl -s -X POST http://localhost:3001/api/forms -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" -d '{\n    \"\"name\"\": \"\"Customer Feedback\"\",\n    \"\"slug\"\": \"\"customer-feedback\"\",\n    \"\"description\"\": \"\"Share your thoughts with us\"\",\n    \"\"schema\"\": {\n      \"\"fields\"\": [\n        {\n          \"\"id\"\": \"\"name\"\",\n          \"\"type\"\": \"\"short_text\"\",\n          \"\"label\"\": \"\"What is your name?\"\",\n          \"\"required\"\": true\n        },\n        {\n          \"\"id\"\": \"\"email\"\",\n          \"\"type\"\": \"\"email\"\",\n          \"\"label\"\": \"\"What is your email?\"\",\n          \"\"required\"\": true\n        },\n        {\n          \"\"id\"\": \"\"rating\"\",\n          \"\"type\"\": \"\"rating\"\",\n          \"\"label\"\": \"\"How would you rate us?\"\",\n          \"\"required\"\": true,\n          \"\"validation\"\": {\n            \"\"max\"\": 5\n          }\n        },\n        {\n          \"\"id\"\": \"\"feedback\"\",\n          \"\"type\"\": \"\"long_text\"\",\n          \"\"label\"\": \"\"Any additional feedback?\"\",\n          \"\"required\"\": false\n        }\n      ],\n      \"\"theme\"\": {\n        \"\"layout\"\": \"\"classic\"\",\n        \"\"primaryColor\"\": \"\"#4F46E5\"\"\n      }\n    }\n  }')",
+      "Bash(npx create-next-app:*)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(git init:*)"
+    ]
+  }
+}
