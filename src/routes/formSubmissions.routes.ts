@@ -5,6 +5,7 @@ import { DraftSubmissionModel } from '../models/draftSubmission.model';
 import { validateSubmissionData, sanitizeFieldValue } from '../utils/formValidation';
 import { LogicEngine } from '../services/logicEngine.service';
 import { requireJwt, requireApiKeyMultiTenant } from '../middleware/auth';
+import type { FormField } from '../types/forms';
 
 const router = Router();
 
@@ -282,11 +283,11 @@ router.get('/:formId/submissions/export', requireJwt, requireFormAccess, async (
 
     // Generate CSV
     const fields = form.schema.fields;
-    const headers = ['Submitted At', ...fields.map(f => f.label || f.id)];
+    const headers = ['Submitted At', ...fields.map((f: FormField) => f.label || f.id)];
 
     const rows = submissions.map(sub => {
       const row = [new Date(sub.submitted_at || sub.created_at).toISOString()];
-      fields.forEach(field => {
+      fields.forEach((field: FormField) => {
         const value = sub.submission_data[field.id];
         if (Array.isArray(value)) {
           row.push(value.join(', '));

@@ -72,9 +72,20 @@ export interface FormSettings {
   autoSaveInterval: number;
 }
 
+export type LogicOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'greater_than'
+  | 'less_than'
+  | 'is_empty'
+  | 'is_not_empty'
+  | 'includes_any'
+  | 'includes_all';
+
 export interface LogicCondition {
   fieldId: string;
-  operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than';
+  operator: LogicOperator;
   value: any;
 }
 

@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { JwtPayload } from '../types/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
