@@ -1,7 +1,7 @@
 import request from 'supertest';
 import app from '../app';
 import db from '../db/database';
-import migrate from '../db/migrate';
+import { migrate as migrateDb } from '../db/migrate';
 
 // Set test environment
 process.env.ADMIN_API_KEY = 'test-api-key';
