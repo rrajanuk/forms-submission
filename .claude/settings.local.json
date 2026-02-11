@@ -30,7 +30,9 @@
       "Bash(git remote add:*)",
       "Bash(git branch:*)",
       "Bash(git push:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(timeout:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

@@ -1,6 +1,6 @@
 import db from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
-import { Form, FormCreateInput, FormUpdateInput } from '../types/forms';
+import { Form, FormUpdateInput } from '../types/forms';
 
 export class FormModel {
   static create(data: {

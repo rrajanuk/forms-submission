@@ -1,4 +1,4 @@
-import jwt, { SignOptions } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { JwtPayload } from '../types/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
@@ -11,7 +11,7 @@ const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 export function generateAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
-  });
+  } as any);
 }
 
 /**
@@ -20,7 +20,7 @@ export function generateAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): s
 export function generateRefreshToken(userId: string): string {
   return jwt.sign({ sub: userId }, JWT_SECRET, {
     expiresIn: JWT_REFRESH_EXPIRES_IN,
-  });
+  } as any);
 }
 
 /**

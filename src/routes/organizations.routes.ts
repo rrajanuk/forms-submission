@@ -2,8 +2,7 @@ import { Router, Request, Response } from 'express';
 import { OrganizationModel } from '../models/organization.model';
 import { UserModel } from '../models/user.model';
 import { ApiKeyModel } from '../models/apiKey.model';
-import { Organization } from '../types/auth';
-import { requireJwt, requireApiKeyMultiTenant } from '../middleware/auth';
+import { requireJwt } from '../middleware/auth';
 
 const router = Router();
 

@@ -3,7 +3,7 @@ import { OrganizationModel } from '../models/organization.model';
 import { UserModel } from '../models/user.model';
 import { RefreshTokenModel } from '../models/refreshToken.model';
 import { ApiKeyModel } from '../models/apiKey.model';
-import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt';
+import { generateAccessToken, verifyToken } from '../utils/jwt';
 import { comparePassword } from '../utils/password';
 import { RegisterRequest, LoginRequest, RefreshRequest, AuthResponse } from '../types/auth';
 

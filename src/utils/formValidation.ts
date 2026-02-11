@@ -1,5 +1,5 @@
 import validator from 'validator';
-import { FormSchema, FormField, FieldType } from '../types/forms';
+import { FormSchema, FormField } from '../types/forms';
 
 export interface ValidationError {
   field: string;
