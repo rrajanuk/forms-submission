@@ -10,7 +10,7 @@ process.env.CORS_ORIGIN = 'http://localhost:8080';
 
 describe('Form Submission API', () => {
   beforeAll(() => {
-    migrate();
+    migrateDb();
   });
 
   afterAll(() => {
