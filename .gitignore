@@ -65,3 +65,6 @@ pnpm-lock.yaml
 
 # Misc
 .turbo/
+
+# Windows device files
+nul
