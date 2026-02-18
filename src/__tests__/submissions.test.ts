@@ -2,6 +2,7 @@ import request from 'supertest';
 import app from '../app';
 import db from '../db/database';
 import { migrate as migrateDb } from '../db/migrate';
+import { destroyRateLimiter } from '../utils/rateLimiter';
 
 // Set test environment
 process.env.NODE_ENV = 'test';
@@ -16,6 +17,7 @@ describe('Form Submission API', () => {
 
   afterAll(() => {
     db.close();
+    destroyRateLimiter(); // Clean up rate limiter interval
   });
 
   // Clear database between tests
