@@ -8,6 +8,9 @@ process.env.ADMIN_API_KEY = 'test-api-key';
 process.env.DATABASE_PATH = ':memory:';
 process.env.CORS_ORIGIN = 'http://localhost:8080';
 
+// Disable rate limiting for tests
+process.env.RATE_LIMIT_MAX_REQUESTS = '1000';
+
 describe('Form Submission API', () => {
   beforeAll(() => {
     migrateDb();
