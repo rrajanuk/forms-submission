@@ -41,11 +41,12 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
 
-    // Rate limiting
-    const rateLimitWindow = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '3600000');
-    const rateLimitMax = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '5');
+    // Rate limiting (disabled in test environment)
+    if (process.env.NODE_ENV !== 'test') {
+      const rateLimitWindow = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '3600000');
+      const rateLimitMax = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '5');
 
-    if (!rateLimiter.check(ip, rateLimitMax, rateLimitWindow)) {
+      if (!rateLimiter.check(ip, rateLimitMax, rateLimitWindow)) {
       const response = {
         status: 429,
         body: { error: 'Too many requests. Please try again later.' },
@@ -54,6 +55,7 @@ router.post('/', async (req: Request, res: Response) => {
         IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
       }
       return res.status(429).json(response.body);
+      }
     }
 
     const data: SubmissionInput = req.body;

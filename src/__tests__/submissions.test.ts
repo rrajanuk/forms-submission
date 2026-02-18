@@ -4,12 +4,10 @@ import db from '../db/database';
 import { migrate as migrateDb } from '../db/migrate';
 
 // Set test environment
+process.env.NODE_ENV = 'test';
 process.env.ADMIN_API_KEY = 'test-api-key';
 process.env.DATABASE_PATH = ':memory:';
 process.env.CORS_ORIGIN = 'http://localhost:8080';
-
-// Disable rate limiting for tests
-process.env.RATE_LIMIT_MAX_REQUESTS = '1000';
 
 describe('Form Submission API', () => {
   beforeAll(() => {
@@ -18,6 +16,13 @@ describe('Form Submission API', () => {
 
   afterAll(() => {
     db.close();
+  });
+
+  // Clear database between tests
+  beforeEach(() => {
+    // Clear all tables
+    db.exec('DELETE FROM submissions');
+    db.exec('DELETE FROM idempotency_keys');
   });
 
   describe('POST /api/submissions', () => {

@@ -48,3 +48,6 @@ class InMemoryRateLimiter {
 }
 
 export const rateLimiter = new InMemoryRateLimiter();
+
+// Export for test cleanup
+export const destroyRateLimiter = () => rateLimiter.destroy();
