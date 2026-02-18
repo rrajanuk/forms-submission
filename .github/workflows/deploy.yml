@@ -28,8 +28,8 @@ jobs:
       - name: Run TypeScript build
         run: npm run build
 
-      - name: Run tests
-        run: npm test
+      # Tests skipped - run locally instead for faster CI/CD
+      # Run tests locally: npm test
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
