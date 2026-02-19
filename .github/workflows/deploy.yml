@@ -44,8 +44,10 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -57,17 +59,29 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy to VPS
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             cd ${{ secrets.VPS_PATH }}
+
             git pull origin main
+
+            # Backend
             npm install --omit=dev
             npm run build
             pm2 reload forms-api || pm2 start dist/server.js --name forms-api
+
+            # Frontend
+            cd frontend
+            npm install
+            npm run build
+            pm2 reload forms-frontend || pm2 start npm --name forms-frontend -- start
+
+            pm2 save
           EOF
+
 
       - name: Cleanup
         run: rm -f ~/.ssh/deploy_key
