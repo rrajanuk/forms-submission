@@ -8,12 +8,13 @@ import { AutoSaveService } from './services/autoSave.service';
 dotenv.config();
 
 // Validate required environment variables
-const requiredEnvVars = ['ADMIN_API_KEY'];
-for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    console.error(`Error: ${envVar} environment variable is required`);
-    process.exit(1);
-  }
+const requiredEnvVars = ['ADMIN_API_KEY', 'JWT_SECRET'];
+const missing = requiredEnvVars.filter(envVar => !process.env[envVar]);
+
+if (missing.length > 0) {
+  console.error('❌ Missing required environment variables:', missing.join(', '));
+  console.error('Please set these in your .env file before starting the server.');
+  process.exit(1);
 }
 
 // Run database migrations

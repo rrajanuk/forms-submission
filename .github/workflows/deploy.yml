@@ -66,20 +66,31 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             cd ${{ secrets.VPS_PATH }}
 
+            # Pull latest code
             git pull origin main
 
-            # Backend
+            # Backend setup
             npm install --omit=dev
+            npm rebuild better-sqlite3  # Rebuild native module for VPS architecture
             npm run build
-            pm2 reload forms-api || pm2 start dist/server.js --name forms-api
 
-            # Frontend
+            # Start/reload backend with PM2 ecosystem config
+            pm2 reload ecosystem.config.js --env production || pm2 start ecosystem.config.js --env production
+
+            # Frontend setup
             cd frontend
             npm install
             npm run build
-            pm2 reload forms-frontend || pm2 start npm --name forms-frontend -- start
 
+            # Start/reload frontend with PM2 ecosystem config
+            cd ..
+            pm2 reload frontend/ecosystem.config.js --env production || pm2 start frontend/ecosystem.config.js --env production
+
+            # Save PM2 configuration for auto-restart on reboot
             pm2 save
+
+            # Display status
+            pm2 status
           EOF
 
 

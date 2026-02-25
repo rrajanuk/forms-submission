@@ -15,18 +15,22 @@ export default function FormPreview() {
   const { form, fields, theme } = useFormBuilder();
 
   const getThemeStyles = () => {
-    const colors = theme || {
-      primaryColor: '#4F46E5',
-      backgroundColor: '#ffffff',
-      textColor: '#1F2937',
-      buttonColor: '#4F46E5',
+    const defaultTheme = {
+      colors: {
+        primary: '#4F46E5',
+        background: '#ffffff',
+        text: '#1F2937',
+        button: '#4F46E5',
+      },
     };
 
+    const colors = theme?.colors || defaultTheme.colors;
+
     return {
-      '--form-primary': colors.primaryColor,
-      '--form-bg': colors.backgroundColor,
-      '--form-text': colors.textColor,
-      '--form-button': colors.buttonColor,
+      '--form-primary': colors.primary,
+      '--form-bg': colors.background,
+      '--form-text': colors.text,
+      '--form-button': colors.button,
     } as React.CSSProperties;
   };
 
@@ -336,7 +340,7 @@ export default function FormPreview() {
       {/* Theme Info */}
       <div className="text-xs text-gray-500 space-y-1">
         <p><strong>Layout:</strong> {theme?.layout || 'classic'}</p>
-        <p><strong>Primary Color:</strong> {theme?.primaryColor || '#4F46E5'}</p>
+        <p><strong>Primary Color:</strong> {theme?.colors?.primary || '#4F46E5'}</p>
       </div>
     </div>
   );

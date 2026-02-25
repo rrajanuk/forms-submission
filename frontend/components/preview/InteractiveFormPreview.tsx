@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Slider } from '@/components/ui/slider';
-import { CheckCircle2, Star } from 'lucide-react';
+import { CheckCircle2, Star, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -25,11 +25,14 @@ export default function InteractiveFormPreview({ form }: InteractiveFormPreviewP
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const theme = form.schema.theme || {
-    primaryColor: '#4F46E5',
-    backgroundColor: '#ffffff',
-    textColor: '#1F2937',
-    buttonColor: '#4F46E5',
-    layout: 'classic',
+    colors: {
+      primary: '#4F46E5',
+      background: '#ffffff',
+      text: '#1F2937',
+      button: '#4F46E5',
+    },
+    font: 'Inter',
+    layout: 'classic' as const,
   };
 
   const settings = form.schema.settings || {};
@@ -517,12 +520,12 @@ export default function InteractiveFormPreview({ form }: InteractiveFormPreviewP
 
   return (
     <div className="max-w-3xl mx-auto px-4">
-      <Card className="p-8" style={{ backgroundColor: theme.backgroundColor }}>
+      <Card className="p-8" style={{ backgroundColor: theme.colors?.background }}>
         {/* Form Header */}
         <div className="mb-8 text-center">
           <h1
             className="text-3xl font-bold mb-3"
-            style={{ color: theme.textColor }}
+            style={{ color: theme.colors?.text }}
           >
             {form.name}
           </h1>
@@ -549,7 +552,7 @@ export default function InteractiveFormPreview({ form }: InteractiveFormPreviewP
                 className="w-full"
                 disabled={isSubmitting}
                 style={{
-                  backgroundColor: theme.buttonColor,
+                  backgroundColor: theme.colors?.button,
                   color: '#fff',
                 }}
               >

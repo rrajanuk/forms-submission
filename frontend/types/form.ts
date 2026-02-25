@@ -130,3 +130,13 @@ export interface UpdateFormInput {
   schema?: Partial<FormSchema>;
   status?: 'draft' | 'published' | 'archived';
 }
+
+export interface FormSubmission {
+  id: string;
+  form_id: string;
+  submission_data: Record<string, any>;
+  status: 'complete' | 'draft' | 'abandoned';
+  created_at: string;
+  submitted_at?: string;
+  updated_at?: string;
+}

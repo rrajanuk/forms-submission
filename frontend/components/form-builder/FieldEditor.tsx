@@ -19,7 +19,7 @@ interface FieldEditorProps {
 export default function FieldEditor({ field }: FieldEditorProps) {
   const { updateField, deleteField, duplicateField } = useFormBuilder();
   const [options, setOptions] = useState(
-    field.options?.map((o) => ({ id: o.id, label: o.label })) || []
+    field.options?.map((o) => ({ id: o.id, label: o.label, order: o.order })) || []
   );
 
   const handleUpdate = (data: Partial<FormField>) => {

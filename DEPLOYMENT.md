@@ -41,48 +41,88 @@ This guide will help you deploy the Form Submission Platform to a VPS.
 
 ---
 
-### Option 2: Direct Deployment (Without Docker)
+### Option 2: Direct Deployment with PM2 (Recommended for CI/CD)
 
 #### Prerequisites
 - Node.js 20+ installed
 - PM2 installed globally: `npm install -g pm2`
+- Build tools: `sudo apt install build-essential python3`
 
-#### Deploy Backend
+#### Initial Setup
 
 ```bash
+# Install system dependencies
+sudo apt update
+sudo apt install -y build-essential python3
+
+# Clone repository
+cd /var/www
+git clone https://github.com/rrajanuk/forms-submission.git
 cd forms-submission
 
-# Install dependencies
-npm install --production
+# Configure environment
+cp .env.example .env
+nano .env  # Add your secrets (see below)
 
-# Build TypeScript
+# Frontend environment
+cd frontend
+cp .env.production .env.local
+nano .env.local  # Set NEXT_PUBLIC_API_URL
+cd ..
+
+# Build backend
+npm install --omit=dev
+npm rebuild better-sqlite3  # Critical: rebuild native module for VPS architecture
 npm run build
 
-# Start with PM2
-pm2 start dist/server.js --name form-api
-
-# Save PM2 process list
-pm2 save
-pm2 startup
+# Build frontend
+cd frontend
+npm install
+npm run build
+cd ..
 ```
 
-#### Deploy Frontend
+#### Deploy with PM2 Ecosystem Config
 
 ```bash
-cd frontend
+# Start backend (uses ecosystem.config.js)
+pm2 start ecosystem.config.js --env production
 
-# Install dependencies
-npm install
+# Start frontend (uses frontend/ecosystem.config.js)
+pm2 start frontend/ecosystem.config.js --env production
 
-# Build Next.js app
-npm run build
-
-# Start with PM2
-pm2 start npm --name form-frontend -- start "npm start"
-
-# Save PM2 process list
+# Save PM2 configuration (auto-restart on reboot)
 pm2 save
+
+# Setup PM2 startup script
 pm2 startup
+# Follow the instructions - copy and run the generated command as sudo
+```
+
+#### Update Environment Variables (.env)
+
+```bash
+# Required in production
+NODE_ENV=production
+PORT=3001
+
+# Generate secure secrets
+ADMIN_API_KEY=$(openssl rand -base64 32)
+JWT_SECRET=$(openssl rand -base64 32)
+
+# CORS (comma-separated domains)
+CORS_ORIGIN=https://yourdomain.com,https://www.yourdomain.com
+
+# JWT Configuration
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+```
+
+#### Frontend Environment (.env.local)
+
+```bash
+# Update with your actual API domain
+NEXT_PUBLIC_API_URL=https://api.yourdomain.com
 ```
 
 ---
@@ -269,19 +309,59 @@ docker-compose up -d --build
 
 ```bash
 # Pull latest code
-git pull
+git pull origin main
 
 # Backend
-cd forms-submission
-npm install --production
+npm install --omit=dev
+npm rebuild better-sqlite3  # Rebuild native module
 npm run build
-pm2 restart form-api
+pm2 reload ecosystem.config.js --env production
 
 # Frontend
 cd frontend
 npm install
 npm run build
-pm2 restart form-frontend
+cd ..
+pm2 reload frontend/ecosystem.config.js --env production
+
+# Save PM2 configuration
+pm2 save
+```
+
+### Automated Deployment via GitHub Actions
+
+This repository includes CI/CD configuration for automatic deployment to VPS.
+
+**Setup GitHub Secrets:**
+1. Go to Repository → Settings → Secrets and variables → Actions
+2. Add the following secrets:
+
+| Secret Name | Description | Example |
+|-------------|-------------|---------|
+| `VPS_HOST` | VPS IP address or domain | `123.45.67.89` |
+| `VPS_USER` | SSH username | `ubuntu` |
+| `VPS_PATH` | Project path on VPS | `/var/www/forms-submission` |
+| `SSH_PRIVATE_KEY` | SSH private key | Output of `cat ~/.ssh/id_rsa` |
+
+**Generate SSH key for deployment:**
+```bash
+# On your local machine
+ssh-keygen -t ed25519 -C "github-deploy" -f ~/.ssh/github_actions_deploy
+
+# Copy public key to VPS
+ssh-copy-id -i ~/.ssh/github_actions_deploy.pub user@your-vps-ip
+
+# Copy private key for GitHub secret
+cat ~/.ssh/github_actions_deploy  # Copy entire output to GitHub secret
+```
+
+**Deploy:**
+```bash
+# Push to main branch - automatic deployment
+git push origin main
+
+# Monitor deployment at:
+# https://github.com/rrajanuk/forms-submission/actions
 ```
 
 ---
@@ -313,6 +393,56 @@ cd frontend
 rm -rf .next node_modules
 npm install
 npm run build
+```
+
+### better-sqlite3 module errors
+**Error:** `Cannot find module 'better-sqlite3'` or module incompatible
+
+**Solution:**
+```bash
+cd /var/www/forms-submission
+npm rebuild better-sqlite3
+npm run build
+pm2 reload forms-api
+```
+
+### PM2 apps crash on startup
+**Check logs:**
+```bash
+pm2 logs forms-api --err --lines 50
+pm2 logs forms-frontend --err --lines 50
+```
+
+**Common causes:**
+- Missing `JWT_SECRET` in `.env`
+- Wrong `NEXT_PUBLIC_API_URL` in frontend
+- Database file permissions
+- Port conflicts
+
+### CORS errors in browser
+**Error:** `Access-Control-Allow-Origin` header missing
+
+**Solution:**
+```bash
+nano .env
+# Update CORS_ORIGIN with your actual frontend domains
+CORS_ORIGIN=https://yourdomain.com,https://www.yourdomain.com
+
+pm2 reload forms-api
+```
+
+### GitHub Actions deployment fails
+**Error:** `Permission denied (publickey)`
+
+**Solution:**
+```bash
+# Test SSH connection locally
+ssh -i ~/.ssh/github_actions_deploy user@vps-ip
+
+# Re-add public key to VPS
+ssh-copy-id -i ~/.ssh/github_actions_deploy.pub user@vps-ip
+
+# Verify GitHub secret matches private key
 ```
 
 ---
