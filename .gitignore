@@ -59,7 +59,7 @@ Thumbs.db
 uploads/
 
 # Lock files
-package-lock.json
+# package-lock.json - COMMITTED for CI/CD (npm ci needs this)
 yarn.lock
 pnpm-lock.yaml
 
