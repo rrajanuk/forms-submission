@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc && node -e \"const fs=require('fs');fs.mkdirSync('dist/db',{recursive:true});fs.copyFileSync('src/db/schema.sql','dist/db/schema.sql');\"",
+    "build": "tsc && node -e \"const fs=require('fs'),path=require('path');fs.mkdirSync('dist/db/migrations',{recursive:true});fs.copyFileSync('src/db/schema.sql','dist/db/schema.sql');fs.readdirSync('src/db/migrations').filter(f=>f.endsWith('.sql')).forEach(f=>fs.copyFileSync(path.join('src/db/migrations',f),path.join('dist/db/migrations',f)));\"",
     "start": "node dist/server.js",
     "migrate": "ts-node src/db/migrate.ts",
     "test": "jest --coverage",

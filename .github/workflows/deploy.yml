@@ -1,16 +1,12 @@
-name: Build and Deploy
+name: Build & Deploy Forms API
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 jobs:
   build-and-test:
-    name: Build and Test
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -20,79 +16,61 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-        env:
-          JEST_CACHE_DISABLE: true
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Run TypeScript build
+      - name: Build
         run: npm run build
 
-      # Tests skipped - run locally instead for faster CI/CD
-      # Run tests locally: npm test
+      - name: Verify migration files copied
+        run: |
+          test -f dist/db/schema.sql || (echo "❌ schema.sql missing from dist" && exit 1)
+          ls dist/db/migrations/*.sql > /dev/null 2>&1 || (echo "❌ Migration SQL files missing from dist" && exit 1)
+          echo "✅ All SQL files present in dist"
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
+      - name: Test
+        run: npm test --if-present
 
   deploy:
-    name: Deploy to VPS
     runs-on: ubuntu-latest
     needs: build-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
+    if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          printf "%s" "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
-          
       - name: Deploy to VPS
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            cd ${{ secrets.VPS_PATH }}
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            set -e
 
-            # Pull latest code
+            echo "📦 Starting deployment..."
+            cd ~/forms/forms-submission
+
+            echo "⬇️  Pulling latest code..."
             git pull origin main
 
-            # Backend setup
-            npm install --omit=dev
-            npm rebuild better-sqlite3  # Rebuild native module for VPS architecture
+            echo "📥 Installing dependencies..."
+            npm ci
+
+            echo "🔨 Building..."
             npm run build
 
-            # Start/reload backend with PM2 ecosystem config
-            pm2 reload ecosystem.config.js --env production || pm2 start ecosystem.config.js --env production
+            echo "🧹 Pruning dev dependencies..."
+            npm prune --omit=dev
 
-            # Frontend setup
-            cd frontend
-            npm install
-            npm run build
-
-            # Start/reload frontend with PM2 ecosystem config
-            cd ..
-            pm2 reload frontend/ecosystem.config.js --env production || pm2 start frontend/ecosystem.config.js --env production
-
-            # Save PM2 configuration for auto-restart on reboot
+            echo "🔄 Restarting PM2..."
+            pm2 restart forms-api || pm2 start ecosystem.config.js
             pm2 save
 
-            # Display status
+            echo "⏳ Waiting for app to start..."
+            sleep 3
+
+            echo "🏥 Health check..."
+            curl -sf http://127.0.0.1:4000/health || (echo "❌ Health check failed!" && pm2 logs forms-api --lines 20 --err && exit 1)
+
+            echo "✅ Deployment successful"
             pm2 status
-          EOF
-
-
-      - name: Cleanup
-        run: rm -f ~/.ssh/deploy_key
