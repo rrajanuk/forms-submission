@@ -6,6 +6,7 @@ import { ApiKeyModel } from '../models/apiKey.model';
 import { generateAccessToken, verifyToken } from '../utils/jwt';
 import { comparePassword } from '../utils/password';
 import { RegisterRequest, LoginRequest, RefreshRequest, AuthResponse } from '../types/auth';
+import { sendVerificationEmail } from '../services/email.service';
 
 const router = Router();
 
@@ -56,6 +57,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // Check if slug is taken
     const slug = data.organization_slug || generateSlug(data.organization_name);
+
     if (OrganizationModel.findBySlug(slug)) {
       return res.status(409).json({ error: 'Organization slug already taken' });
     }
@@ -67,8 +69,8 @@ router.post('/register', async (req: Request, res: Response) => {
       plan: 'free',
     });
 
-    // Create user
-    const user = UserModel.create({
+    // Create user with verification token
+    const { user, verificationToken } = UserModel.createWithVerificationToken({
       organization_id: organization.id,
       email: data.email,
       password: data.password,
@@ -106,6 +108,22 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // Include the raw API key in the response (only shown once)
     (response as any).apiKey = rawKey;
+
+    // Send verification email
+    const emailResult = await sendVerificationEmail(
+      user.email,
+      user.name || user.email.split('@')[0],
+      verificationToken
+    );
+
+    if (emailResult.success) {
+      // Don't include token in response if email was sent successfully
+    } else {
+      // Include token in response as fallback if email failed
+      if (emailResult.fallbackToken) {
+        (response as any).verificationToken = verificationToken;
+      }
+    }
 
     res.status(201).json(response);
   } catch (error) {
@@ -290,6 +308,106 @@ router.post('/me', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Get user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/auth/verify-email
+ * Verify email with token
+ */
+router.post('/verify-email', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Verification token is required' });
+    }
+
+    const user = UserModel.findByVerificationToken(token);
+    if (!user) {
+      return res.status(404).json({ error: 'Invalid verification token' });
+    }
+
+    // Check if token has expired
+    if (user.verification_token_expires_at && user.verification_token_expires_at < Date.now()) {
+      return res.status(400).json({ error: 'Verification token has expired' });
+    }
+
+    // Verify email
+    const verified = UserModel.verifyEmail(user.id);
+    if (!verified) {
+      return res.status(500).json({ error: 'Failed to verify email' });
+    }
+
+    res.json({
+      message: 'Email verified successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: true,
+      },
+    });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/auth/resend-verification
+ * Resend verification email (requires auth)
+ */
+router.post('/resend-verification', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const token = authHeader.substring(7);
+    const payload = verifyToken(token);
+
+    if (!payload) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const user = UserModel.findByIdWithPassword(payload.sub);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check if already verified
+    if (user.email_verified) {
+      return res.status(400).json({ error: 'Email is already verified' });
+    }
+
+    // Generate new verification token
+    const verificationToken = require('crypto').randomBytes(32).toString('hex');
+    UserModel.setVerificationToken(user.id, verificationToken);
+
+    // Send verification email
+    const emailResult = await sendVerificationEmail(
+      user.email,
+      user.name || user.email.split('@')[0],
+      verificationToken
+    );
+
+    if (emailResult.success) {
+      res.json({
+        message: 'Verification email sent! Please check your inbox.',
+      });
+    } else {
+      // Include token in response as fallback if email failed
+      res.json({
+        message: 'Verification email resent! Please check your inbox.',
+        // Include token only if email sending failed
+        ...(emailResult.fallbackToken && { verificationToken: emailResult.fallbackToken }),
+      });
+    }
+  } catch (error) {
+    console.error('Resend verification error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

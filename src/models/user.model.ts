@@ -12,8 +12,8 @@ export class UserModel {
     role?: 'owner' | 'admin' | 'member';
   }): User {
     const stmt = db.prepare(`
-      INSERT INTO users (id, organization_id, email, password_hash, name, role, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, organization_id, email, password_hash, name, role, created_at, email_verified)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0)
     `);
 
     const id = uuidv4();
@@ -38,6 +38,79 @@ export class UserModel {
       role: data.role || 'member',
       created_at,
     };
+  }
+
+  static createWithVerificationToken(data: {
+    organization_id: string;
+    email: string;
+    password: string;
+    name?: string;
+    role?: 'owner' | 'admin' | 'member';
+  }): { user: User; verificationToken: string } {
+    const id = uuidv4();
+    const created_at = Date.now();
+    const password_hash = hashPassword(data.password);
+    const verificationToken = uuidv4();
+    const tokenExpiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+
+    const stmt = db.prepare(`
+      INSERT INTO users (id, organization_id, email, password_hash, name, role, created_at, email_verified, verification_token, verification_token_expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      data.organization_id,
+      data.email,
+      password_hash,
+      data.name || null,
+      data.role || 'member',
+      created_at,
+      verificationToken,
+      tokenExpiresAt
+    );
+
+    return {
+      user: {
+        id,
+        organization_id: data.organization_id,
+        email: data.email,
+        name: data.name,
+        role: data.role || 'member',
+        created_at,
+      },
+      verificationToken,
+    };
+  }
+
+  static findByVerificationToken(token: string): UserWithPassword | undefined {
+    const stmt = db.prepare('SELECT * FROM users WHERE verification_token = ?');
+    return stmt.get(token) as UserWithPassword | undefined;
+  }
+
+  static verifyEmail(userId: string): boolean {
+    const stmt = db.prepare(`
+      UPDATE users
+      SET email_verified = 1,
+          email_verified_at = ?,
+          verification_token = NULL,
+          verification_token_expires_at = NULL
+      WHERE id = ?
+    `);
+    const result = stmt.run(Date.now(), userId);
+    return result.changes > 0;
+  }
+
+  static setVerificationToken(userId: string, token: string): boolean {
+    const tokenExpiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+    const stmt = db.prepare(`
+      UPDATE users
+      SET verification_token = ?,
+          verification_token_expires_at = ?
+      WHERE id = ?
+    `);
+    const result = stmt.run(token, tokenExpiresAt, userId);
+    return result.changes > 0;
   }
 
   static findById(id: string): User | undefined {

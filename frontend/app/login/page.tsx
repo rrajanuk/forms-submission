@@ -31,9 +31,11 @@ export default function LoginPage() {
 
     try {
       const response = await authApi.login(loginEmail, loginPassword);
+
       localStorage.setItem('access_token', response.tokens.accessToken);
       localStorage.setItem('refresh_token', response.tokens.refreshToken);
       localStorage.setItem('user', JSON.stringify(response.user));
+
       toast.success('Logged in successfully!');
       router.push('/');
     } catch (error: any) {
@@ -54,11 +56,19 @@ export default function LoginPage() {
         password: registerPassword,
         name: registerName,
       });
+
+      // Save tokens and user info
       localStorage.setItem('access_token', response.tokens.accessToken);
       localStorage.setItem('refresh_token', response.tokens.refreshToken);
       localStorage.setItem('user', JSON.stringify(response.user));
-      toast.success('Account created successfully!');
-      router.push('/');
+
+      // Save verification token for welcome page (development mode)
+      if (response.verificationToken) {
+        localStorage.setItem('verification_token', response.verificationToken);
+      }
+
+      toast.success('Account created successfully! Please verify your email.');
+      router.push('/welcome');
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Registration failed');
     } finally {

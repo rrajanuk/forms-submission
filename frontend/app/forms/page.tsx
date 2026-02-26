@@ -14,6 +14,7 @@ import { Loader2 } from 'lucide-react';
 import { config } from '@/lib/config';
 import type { Form } from '@/types/form';
 import { Toaster } from '@/components/ui/sonner';
+import { VerificationWarning } from '@/components/VerificationWarning';
 
 export default function FormsPage() {
   const router = useRouter();
@@ -26,13 +27,24 @@ export default function FormsPage() {
       const data = await formsApi.listForms();
       setForms(data);
     } catch (error: any) {
-      toast.error('Failed to load forms');
+      toast.error(`Failed to load forms: ${error.response?.data?.error || error.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    // Check if user has verified email
+    const verificationToken = localStorage.getItem('verification_token');
+    const hasSeenWarning = sessionStorage.getItem('verification_warning_dismissed');
+
+    // If has verification token and hasn't dismissed warning, redirect to welcome
+    if (verificationToken && !hasSeenWarning) {
+      toast.warning('Please verify your email to access the dashboard');
+      router.push('/welcome');
+      return;
+    }
+
     loadForms();
   }, []);
 
@@ -100,6 +112,9 @@ export default function FormsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Verification Warning Banner */}
+      <VerificationWarning onVerified={loadForms} />
+
       {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

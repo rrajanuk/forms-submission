@@ -23,6 +23,10 @@ export interface User {
 
 export interface UserWithPassword extends User {
   password_hash: string;
+  email_verified?: number;
+  email_verified_at?: number;
+  verification_token?: string;
+  verification_token_expires_at?: number;
 }
 
 export interface ApiKey {
