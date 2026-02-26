@@ -52,24 +52,38 @@ jobs:
             echo "⬇️  Pulling latest code..."
             git pull origin main
 
-            echo "📥 Installing dependencies..."
+            echo "🔨 Building backend..."
             npm ci
-
-            echo "🔨 Building..."
             npm run build
 
             echo "🧹 Pruning dev dependencies..."
             npm prune --omit=dev
 
-            echo "🔄 Restarting PM2..."
-            pm2 restart forms-api || pm2 start ecosystem.config.js
+            echo "🔄 Restarting backend PM2..."
+            pm2 reload ecosystem.config.js --env production || pm2 start ecosystem.config.js --env production
             pm2 save
 
-            echo "⏳ Waiting for app to start..."
+            echo "⏳ Waiting for backend to start..."
             sleep 3
 
-            echo "🏥 Health check..."
-            curl -sf http://127.0.0.1:4000/health || (echo "❌ Health check failed!" && pm2 logs forms-api --lines 20 --err && exit 1)
+            echo "🏥 Backend health check..."
+            curl -sf http://127.0.0.1:3001/health || (echo "❌ Backend health check failed!" && pm2 logs forms-api --lines 20 --err && exit 1)
 
-            echo "✅ Deployment successful"
+            echo "🎨 Building frontend..."
+            cd frontend
+            npm ci
+            npm run build
+
+            echo "🔄 Restarting frontend PM2..."
+            pm2 reload forms-frontend || pm2 start frontend/ecosystem.config.js --env production
+            pm2 save
+
+            echo "⏳ Waiting for frontend to start..."
+            sleep 3
+
+            echo "🎯 Frontend health check..."
+            curl -sf http://127.0.0.1:3000 > /dev/null || (echo "❌ Frontend health check failed!" && pm2 logs frontend --lines 20 --err && exit 1)
+
+            echo "✅ Deployment successful!"
+            echo "📊 PM2 Status:"
             pm2 status
