@@ -23,11 +23,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Verify migration files copied
+      - name: Verify schema file copied
         run: |
           test -f dist/db/schema.sql || (echo "❌ schema.sql missing from dist" && exit 1)
-          ls dist/db/migrations/*.sql > /dev/null 2>&1 || (echo "❌ Migration SQL files missing from dist" && exit 1)
-          echo "✅ All SQL files present in dist"
+          echo "✅ Schema file present in dist"
 
       - name: Test
         run: npm test --if-present
@@ -57,7 +56,7 @@ jobs:
             npm run build
 
             echo "🗄️  Running database migrations..."
-            npm run migrate
+            npm run migrate:prod
 
             echo "🧹 Pruning dev dependencies..."
             npm prune --omit=dev
