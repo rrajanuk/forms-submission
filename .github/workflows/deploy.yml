@@ -56,6 +56,9 @@ jobs:
             npm ci
             npm run build
 
+            echo "🗄️  Running database migrations..."
+            npm run migrate
+
             echo "🧹 Pruning dev dependencies..."
             npm prune --omit=dev
 
