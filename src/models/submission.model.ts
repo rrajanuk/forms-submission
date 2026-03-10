@@ -1,76 +1,155 @@
-import db from '../db/database';
-import { Submission } from '../types';
+import prisma from '../db/prisma';
+import { Submission } from '../types/index';
+
+const toNum = (v: any): any => (typeof v === 'bigint' ? Number(v) : v ?? undefined);
+
+interface SubmissionCreateInput {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  industry: string;
+  message: string;
+  ip?: string;
+  user_agent?: string;
+  page_url?: string;
+  utm?: string;
+  status?: 'new' | 'spam' | 'deleted';
+}
 
 export class SubmissionModel {
-  static create(submission: Omit<Submission, 'created_at'>): Submission {
-    const stmt = db.prepare(`
-      INSERT INTO submissions (
-        id, created_at, name, email, phone, industry, message,
-        ip, user_agent, page_url, utm, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+  static async create(data: SubmissionCreateInput): Promise<Submission> {
+    const submission = await prisma.submission.create({
+      data: {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        phone: data.phone || null,
+        industry: data.industry,
+        message: data.message,
+        ip: data.ip || null,
+        user_agent: data.user_agent || null,
+        page_url: data.page_url || null,
+        utm: data.utm || null,
+        status: data.status || 'new',
+        created_at: Date.now(),
+      },
+    });
 
-    const created_at = Date.now();
-    
-    stmt.run(
-      submission.id,
-      created_at,
-      submission.name,
-      submission.email,
-      submission.phone || null,
-      submission.industry,
-      submission.message,
-      submission.ip || null,
-      submission.user_agent || null,
-      submission.page_url || null,
-      submission.utm || null,
-      submission.status
-    );
-
-    return { ...submission, created_at };
+    return {
+      id: submission.id,
+      created_at: toNum(submission.created_at),
+      name: submission.name,
+      email: submission.email,
+      phone: submission.phone || undefined,
+      industry: submission.industry,
+      message: submission.message,
+      ip: submission.ip || undefined,
+      user_agent: submission.user_agent || undefined,
+      page_url: submission.page_url || undefined,
+      utm: submission.utm || undefined,
+      status: submission.status as Submission['status'],
+    };
   }
 
-  static findById(id: string): Submission | undefined {
-    const stmt = db.prepare('SELECT * FROM submissions WHERE id = ? AND status != ?');
-    return stmt.get(id, 'deleted') as Submission | undefined;
+  static async findById(id: string): Promise<Submission | undefined> {
+    const row = await prisma.submission.findUnique({ where: { id } });
+    if (!row) return undefined;
+
+    return {
+      id: row.id,
+      created_at: toNum(row.created_at),
+      name: row.name,
+      email: row.email,
+      phone: row.phone || undefined,
+      industry: row.industry,
+      message: row.message,
+      ip: row.ip || undefined,
+      user_agent: row.user_agent || undefined,
+      page_url: row.page_url || undefined,
+      utm: row.utm || undefined,
+      status: row.status as Submission['status'],
+    };
   }
 
-  static findAll(limit = 100, offset = 0): Submission[] {
-    const stmt = db.prepare(
-      'SELECT * FROM submissions WHERE status != ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
-    );
-    return stmt.all('deleted', limit, offset) as Submission[];
+  static async findAll(limit = 100, offset = 0): Promise<Submission[]> {
+    const rows = await prisma.submission.findMany({
+      where: {
+        status: {
+          not: 'deleted',
+        },
+      },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      skip: offset,
+    });
+
+    return rows.map(row => ({
+      id: row.id,
+      created_at: toNum(row.created_at),
+      name: row.name,
+      email: row.email,
+      phone: row.phone || undefined,
+      industry: row.industry,
+      message: row.message,
+      ip: row.ip || undefined,
+      user_agent: row.user_agent || undefined,
+      page_url: row.page_url || undefined,
+      utm: row.utm || undefined,
+      status: row.status as Submission['status'],
+    }));
   }
 
-  static delete(id: string): boolean {
-    // Soft delete by marking as deleted
-    const stmt = db.prepare('UPDATE submissions SET status = ? WHERE id = ?');
-    const result = stmt.run('deleted', id);
-    return result.changes > 0;
+  static async findDuplicate(email: string, message: string, timeWindowMs = 60000): Promise<Submission | undefined> {
+    const cutoff = Date.now() - timeWindowMs;
+    const row = await prisma.submission.findFirst({
+      where: {
+        email,
+        message,
+        created_at: { gt: cutoff },
+      },
+    });
+
+    if (!row) return undefined;
+
+    return {
+      id: row.id,
+      created_at: toNum(row.created_at),
+      name: row.name,
+      email: row.email,
+      phone: row.phone || undefined,
+      industry: row.industry,
+      message: row.message,
+      ip: row.ip || undefined,
+      user_agent: row.user_agent || undefined,
+      page_url: row.page_url || undefined,
+      utm: row.utm || undefined,
+      status: row.status as Submission['status'],
+    };
   }
 
-  static findDuplicate(email: string, message: string, timeWindowMs: number): Submission | undefined {
-    const cutoffTime = Date.now() - timeWindowMs;
-    const stmt = db.prepare(`
-      SELECT * FROM submissions 
-      WHERE email = ? 
-      AND message = ? 
-      AND created_at > ?
-      AND status != 'deleted'
-      ORDER BY created_at DESC
-      LIMIT 1
-    `);
-    return stmt.get(email, message, cutoffTime) as Submission | undefined;
+  static async updateStatus(id: string, status: Submission['status']): Promise<boolean> {
+    try {
+      await prisma.submission.update({
+        where: { id },
+        data: { status },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  static countByIpInWindow(ip: string, windowMs: number): number {
-    const cutoffTime = Date.now() - windowMs;
-    const stmt = db.prepare(`
-      SELECT COUNT(*) as count 
-      FROM submissions 
-      WHERE ip = ? AND created_at > ?
-    `);
-    const result = stmt.get(ip, cutoffTime) as { count: number };
-    return result.count;
+  static async delete(id: string): Promise<boolean> {
+    try {
+      await prisma.submission.delete({ where: { id } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  static async count(): Promise<number> {
+    return prisma.submission.count();
   }
 }

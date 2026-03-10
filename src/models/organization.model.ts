@@ -1,78 +1,115 @@
-import db from '../db/database';
-import { v4 as uuidv4 } from 'uuid';
+import prisma from '../db/prisma';
 import { Organization } from '../types/auth';
 
+const toNum = (v: any): any => (typeof v === 'bigint' ? Number(v) : v ?? undefined);
+
+/**
+ * Organization Model - Prisma Implementation
+ */
 export class OrganizationModel {
-  static create(data: Omit<Organization, 'id' | 'created_at' | 'updated_at'>): Organization {
-    const stmt = db.prepare(`
-      INSERT INTO organizations (id, name, slug, plan, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-    const id = uuidv4();
-    const created_at = Date.now();
-    const updated_at = Date.now();
-
-    stmt.run(id, data.name, data.slug, data.plan, created_at, updated_at);
-
-    return { id, name: data.name, slug: data.slug, plan: data.plan, created_at, updated_at };
+  static async create(data: Omit<Organization, 'id' | 'created_at' | 'updated_at'>): Promise<Organization> {
+    const now = Date.now();
+    const org = await prisma.organization.create({
+      data: {
+        name: data.name,
+        slug: data.slug,
+        plan: data.plan,
+        created_at: now,
+        updated_at: now,
+      },
+    });
+    return {
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      plan: org.plan as Organization['plan'],
+      created_at: toNum(org.created_at),
+      updated_at: toNum(org.updated_at),
+    };
   }
 
-  static findById(id: string): Organization | undefined {
-    const stmt = db.prepare('SELECT * FROM organizations WHERE id = ?');
-    return stmt.get(id) as Organization | undefined;
+  static async findById(id: string): Promise<Organization | undefined> {
+    const org = await prisma.organization.findUnique({
+      where: { id },
+    });
+    if (!org) return undefined;
+    return {
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      plan: org.plan as Organization['plan'],
+      created_at: toNum(org.created_at),
+      updated_at: toNum(org.updated_at),
+    };
   }
 
-  static findBySlug(slug: string): Organization | undefined {
-    const stmt = db.prepare('SELECT * FROM organizations WHERE slug = ?');
-    return stmt.get(slug) as Organization | undefined;
+  static async findBySlug(slug: string): Promise<Organization | undefined> {
+    const org = await prisma.organization.findUnique({
+      where: { slug },
+    });
+    if (!org) return undefined;
+    return {
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      plan: org.plan as Organization['plan'],
+      created_at: toNum(org.created_at),
+      updated_at: toNum(org.updated_at),
+    };
   }
 
-  static findAll(limit = 100, offset = 0): Organization[] {
-    const stmt = db.prepare('SELECT * FROM organizations ORDER BY created_at DESC LIMIT ? OFFSET ?');
-    return stmt.all(limit, offset) as Organization[];
+  static async findAll(limit = 100, offset = 0): Promise<Organization[]> {
+    const orgs = await prisma.organization.findMany({
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      skip: offset,
+    });
+    return orgs.map(o => ({
+      id: o.id,
+      name: o.name,
+      slug: o.slug,
+      plan: o.plan as Organization['plan'],
+      created_at: toNum(o.created_at),
+      updated_at: toNum(o.updated_at),
+    }));
   }
 
-  static update(id: string, data: Partial<Omit<Organization, 'id' | 'created_at'>>): Organization | undefined {
-    const updates: string[] = [];
-    const values: any[] = [];
-
-    if (data.name !== undefined) {
-      updates.push('name = ?');
-      values.push(data.name);
+  static async update(id: string, data: Partial<Omit<Organization, 'id' | 'created_at'>>): Promise<Organization | undefined> {
+    try {
+      const org = await prisma.organization.update({
+        where: { id },
+        data: {
+          ...(data.name !== undefined && { name: data.name }),
+          ...(data.slug !== undefined && { slug: data.slug }),
+          ...(data.plan !== undefined && { plan: data.plan }),
+          updated_at: Date.now(),
+        },
+      });
+      return {
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        plan: org.plan as Organization['plan'],
+        created_at: toNum(org.created_at),
+        updated_at: toNum(org.updated_at),
+      };
+    } catch {
+      return undefined;
     }
-    if (data.slug !== undefined) {
-      updates.push('slug = ?');
-      values.push(data.slug);
-    }
-    if (data.plan !== undefined) {
-      updates.push('plan = ?');
-      values.push(data.plan);
-    }
-
-    if (updates.length === 0) {
-      return this.findById(id);
-    }
-
-    updates.push('updated_at = ?');
-    values.push(Date.now());
-    values.push(id);
-
-    const stmt = db.prepare(`UPDATE organizations SET ${updates.join(', ')} WHERE id = ?`);
-    stmt.run(...values);
-
-    return this.findById(id);
   }
 
-  static delete(id: string): boolean {
-    const stmt = db.prepare('DELETE FROM organizations WHERE id = ?');
-    const result = stmt.run(id);
-    return result.changes > 0;
+  static async delete(id: string): Promise<boolean> {
+    try {
+      await prisma.organization.delete({
+        where: { id },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  static count(): number {
-    const stmt = db.prepare('SELECT COUNT(*) as count FROM organizations');
-    const result = stmt.get() as { count: number };
-    return result.count;
+  static async count(): Promise<number> {
+    return prisma.organization.count();
   }
 }

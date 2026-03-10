@@ -21,7 +21,7 @@ export class AutoSaveService {
     message: string;
   }> {
     // Find form by slug - search across all published forms
-    const form = FormModel.findPublishedBySlug(data.formSlug);
+    const form = await FormModel.findPublishedBySlug(data.formSlug);
 
     if (!form) {
       throw new Error('Form not found');
@@ -32,11 +32,11 @@ export class AutoSaveService {
     }
 
     // Check if draft already exists
-    const existing = DraftSubmissionModel.findByFormAndSession(form.id, data.sessionId);
+    const existing = await DraftSubmissionModel.findByFormAndSession(form.id, data.sessionId);
 
     if (existing) {
       // Update existing draft
-      DraftSubmissionModel.update(existing.id, {
+      await DraftSubmissionModel.update(existing.id, {
         submission_data: data.submissionData,
         current_step: data.currentStep || 0,
       });
@@ -49,7 +49,7 @@ export class AutoSaveService {
     }
 
     // Create new draft
-    const draft = DraftSubmissionModel.create({
+    const draft = await DraftSubmissionModel.create({
       form_id: form.id,
       session_id: data.sessionId,
       submission_data: data.submissionData,
@@ -74,21 +74,21 @@ export class AutoSaveService {
     expiresAt: number;
   } | null> {
     // Find form by slug
-    const form = FormModel.findPublishedBySlug(formSlug);
+    const form = await FormModel.findPublishedBySlug(formSlug);
 
     if (!form) {
       return null;
     }
 
-    const draft = DraftSubmissionModel.findByFormAndSession(form.id, sessionId);
+    const draft = await DraftSubmissionModel.findByFormAndSession(form.id, sessionId);
 
     if (!draft) {
       return null;
     }
 
     // Check if draft has expired
-    if (draft.expires_at < Date.now()) {
-      DraftSubmissionModel.delete(draft.id);
+    if (Number(draft.expires_at) < Date.now()) {
+      await DraftSubmissionModel.delete(draft.id);
       return null;
     }
 
@@ -97,7 +97,7 @@ export class AutoSaveService {
       formId: draft.form_id,
       submissionData: draft.submission_data,
       currentStep: draft.current_step,
-      expiresAt: draft.expires_at,
+      expiresAt: Number(draft.expires_at),
     };
   }
 
@@ -116,27 +116,27 @@ export class AutoSaveService {
     submittedAt: number;
   }> {
     // Find form by slug
-    const form = FormModel.findPublishedBySlug(formSlug);
+    const form = await FormModel.findPublishedBySlug(formSlug);
 
     if (!form) {
       throw new Error('Form not found');
     }
 
     // Find draft
-    const draft = DraftSubmissionModel.findByFormAndSession(form.id, sessionId);
+    const draft = await DraftSubmissionModel.findByFormAndSession(form.id, sessionId);
 
     if (!draft) {
       throw new Error('Draft not found');
     }
 
     // Check if draft has expired
-    if (draft.expires_at < Date.now()) {
-      DraftSubmissionModel.delete(draft.id);
+    if (Number(draft.expires_at) < Date.now()) {
+      await DraftSubmissionModel.delete(draft.id);
       throw new Error('Draft has expired');
     }
 
     // Create complete submission
-    const submission = FormSubmissionModel.create({
+    const submission = await FormSubmissionModel.create({
       form_id: form.id,
       organization_id: form.organization_id,
       submission_data: draft.submission_data,
@@ -145,7 +145,7 @@ export class AutoSaveService {
     });
 
     // Delete draft
-    DraftSubmissionModel.delete(draft.id);
+    await DraftSubmissionModel.delete(draft.id);
 
     return {
       id: submission.id,
@@ -161,40 +161,40 @@ export class AutoSaveService {
    */
   static async deleteDraft(formSlug: string, sessionId: string): Promise<boolean> {
     // Find form by slug
-    const form = FormModel.findPublishedBySlug(formSlug);
+    const form = await FormModel.findPublishedBySlug(formSlug);
 
     if (!form) {
       return false;
     }
 
-    const draft = DraftSubmissionModel.findByFormAndSession(form.id, sessionId);
+    const draft = await DraftSubmissionModel.findByFormAndSession(form.id, sessionId);
 
     if (!draft) {
       return false;
     }
 
-    return DraftSubmissionModel.delete(draft.id);
+    return await DraftSubmissionModel.delete(draft.id);
   }
 
   /**
    * Cleanup expired drafts
    * This should be called periodically (e.g., every hour)
    */
-  static cleanupExpiredDrafts(): {
+  static async cleanupExpiredDrafts(): Promise<{
     count: number;
     oldest: number;
-  } {
-    const count = DraftSubmissionModel.deleteExpired();
+  }> {
+    const result = await DraftSubmissionModel.deleteExpired();
 
     // Get the oldest remaining draft age
-    const drafts = DraftSubmissionModel.findByForm('', 1000, 0);
+    const drafts = await DraftSubmissionModel.findByForm('', 1000, 0);
     const now = Date.now();
     const oldest = drafts.length > 0
-      ? Math.min(...drafts.map(d => (now - d.created_at) / (1000 * 60 * 60 * 24))) // days
+      ? Math.min(...drafts.map((d: any) => (now - d.created_at) / (1000 * 60 * 60 * 24))) // days
       : 0;
 
     return {
-      count,
+      count: result.count,
       oldest,
     };
   }
@@ -212,10 +212,10 @@ export class AutoSaveService {
     const cutoffTime = Date.now();
 
     // Get all drafts (limited to 1000 for performance)
-    const drafts = DraftSubmissionModel.findByForm('', 1000, 0);
+    const drafts = await DraftSubmissionModel.findByForm('', 1000, 0);
 
-    const expired = drafts.filter(d => d.expires_at < cutoffTime).length;
-    const active = drafts.filter(d => d.expires_at >= cutoffTime).length;
+    const expired = drafts.filter((d: any) => d.expires_at < cutoffTime).length;
+    const active = drafts.filter((d: any) => d.expires_at >= cutoffTime).length;
 
     return {
       total: drafts.length,

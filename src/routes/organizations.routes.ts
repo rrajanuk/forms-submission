@@ -30,7 +30,7 @@ const requireOrganizationAccess = (req: Request, res: Response, next: Function) 
 router.get('/', requireJwt, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const organization = OrganizationModel.findById(user.organization_id);
+    const organization = await OrganizationModel.findById(user.organization_id);
 
     if (!organization) {
       return res.status(404).json({ error: 'Organization not found' });
@@ -50,7 +50,7 @@ router.get('/', requireJwt, async (req: Request, res: Response) => {
 router.get('/:id', requireJwt, requireOrganizationAccess, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const organization = OrganizationModel.findById(id);
+    const organization = await OrganizationModel.findById(id);
 
     if (!organization) {
       return res.status(404).json({ error: 'Organization not found' });
@@ -79,7 +79,7 @@ router.put('/:id', requireJwt, requireOrganizationAccess, async (req: Request, r
 
     const { name, plan } = req.body;
 
-    const updated = OrganizationModel.update(id, { name, plan });
+    const updated = await OrganizationModel.update(id, { name, plan });
 
     if (!updated) {
       return res.status(404).json({ error: 'Organization not found' });
@@ -106,7 +106,7 @@ router.delete('/:id', requireJwt, requireOrganizationAccess, async (req: Request
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const deleted = OrganizationModel.delete(id);
+    const deleted = await OrganizationModel.delete(id);
 
     if (!deleted) {
       return res.status(404).json({ error: 'Organization not found' });
@@ -129,7 +129,7 @@ router.get('/:id/members', requireJwt, requireOrganizationAccess, async (req: Re
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    const members = UserModel.findByOrganization(id, limit, offset);
+    const members = await UserModel.findByOrganization(id, limit, offset);
 
     res.json(members);
   } catch (error) {
@@ -148,10 +148,10 @@ router.get('/:id/api-keys', requireJwt, requireOrganizationAccess, async (req: R
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    const apiKeys = ApiKeyModel.findByOrganization(id, limit, offset);
+    const apiKeys = await ApiKeyModel.findByOrganization(id, limit, offset);
 
     // Don't expose the key_hash
-    const sanitized = apiKeys.map(key => ({
+    const sanitized = apiKeys.map((key: any) => ({
       id: key.id,
       user_id: key.user_id,
       organization_id: key.organization_id,
@@ -183,7 +183,7 @@ router.post('/:id/api-keys', requireJwt, requireOrganizationAccess, async (req: 
       return res.status(400).json({ error: 'Name and scopes are required' });
     }
 
-    const { apiKey, rawKey } = ApiKeyModel.create({
+    const { apiKey, rawKey } = await ApiKeyModel.create({
       user_id: user.sub,
       organization_id: id,
       name,
@@ -192,12 +192,14 @@ router.post('/:id/api-keys', requireJwt, requireOrganizationAccess, async (req: 
     });
 
     res.status(201).json({
-      id: apiKey.id,
-      name: apiKey.name,
-      scopes: apiKey.scopes,
-      key: rawKey, // Only shown once
-      expires_at: apiKey.expires_at,
-      created_at: apiKey.created_at,
+      apiKey: {
+        id: apiKey.id,
+        name: apiKey.name,
+        scopes: apiKey.scopes,
+        expires_at: apiKey.expires_at,
+        created_at: apiKey.created_at,
+      },
+      rawKey, // Only shown once
     });
   } catch (error) {
     console.error('Create API key error:', error);
@@ -213,7 +215,7 @@ router.delete('/:id/api-keys/:keyId', requireJwt, requireOrganizationAccess, asy
   try {
     const { keyId } = req.params;
 
-    const deleted = ApiKeyModel.delete(keyId);
+    const deleted = await ApiKeyModel.delete(keyId);
 
     if (!deleted) {
       return res.status(404).json({ error: 'API key not found' });

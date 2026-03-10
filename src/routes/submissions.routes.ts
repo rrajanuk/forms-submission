@@ -34,7 +34,7 @@ router.post('/', async (req: Request, res: Response) => {
     // Check idempotency key
     const idempotencyKey = req.headers['idempotency-key'] as string;
     if (idempotencyKey) {
-      const existing = IdempotencyModel.findByKey(idempotencyKey);
+      const existing = await IdempotencyModel.findByKey(idempotencyKey);
       if (existing) {
         const cachedResponse = JSON.parse(existing.response);
         return res.status(cachedResponse.status).json(cachedResponse.body);
@@ -47,14 +47,14 @@ router.post('/', async (req: Request, res: Response) => {
       const rateLimitMax = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '5');
 
       if (!rateLimiter.check(ip, rateLimitMax, rateLimitWindow)) {
-      const response = {
-        status: 429,
-        body: { error: 'Too many requests. Please try again later.' },
-      };
-      if (idempotencyKey) {
-        IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
-      }
-      return res.status(429).json(response.body);
+        const response = {
+          status: 429,
+          body: { error: 'Too many requests. Please try again later.' },
+        };
+        if (idempotencyKey) {
+          await IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
+        }
+        return res.status(429).json(response.body);
       }
     }
 
@@ -67,7 +67,7 @@ router.post('/', async (req: Request, res: Response) => {
         body: { error: 'Spam detected' },
       };
       if (idempotencyKey) {
-        IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
+        await IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
       }
       return res.status(400).json(response.body);
     }
@@ -80,7 +80,7 @@ router.post('/', async (req: Request, res: Response) => {
         body: { error: timeCheck.reason },
       };
       if (idempotencyKey) {
-        IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
+        await IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
       }
       return res.status(400).json(response.body);
     }
@@ -94,7 +94,7 @@ router.post('/', async (req: Request, res: Response) => {
           body: { error: 'CAPTCHA verification failed' },
         };
         if (idempotencyKey) {
-          IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
+          await IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
         }
         return res.status(400).json(response.body);
       }
@@ -108,7 +108,7 @@ router.post('/', async (req: Request, res: Response) => {
         body: { error: 'Validation failed', errors: validationErrors },
       };
       if (idempotencyKey) {
-        IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
+        await IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
       }
       return res.status(400).json(response.body);
     }
@@ -120,13 +120,13 @@ router.post('/', async (req: Request, res: Response) => {
         body: { error: 'Disposable email addresses are not allowed' },
       };
       if (idempotencyKey) {
-        IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
+        await IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
       }
       return res.status(400).json(response.body);
     }
 
     // Duplicate detection (same email + message within 1 hour)
-    const duplicate = SubmissionModel.findDuplicate(
+    const duplicate = await SubmissionModel.findDuplicate(
       data.email,
       data.message,
       60 * 60 * 1000 // 1 hour
@@ -140,13 +140,13 @@ router.post('/', async (req: Request, res: Response) => {
         },
       };
       if (idempotencyKey) {
-        IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
+        await IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
       }
       return res.status(409).json(response.body);
     }
 
     // Create submission
-    const submission = SubmissionModel.create({
+    const submission = await SubmissionModel.create({
       id: uuidv4(),
       name: sanitizeString(data.name),
       email: sanitizeString(data.email),
@@ -175,7 +175,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Save idempotency key
     if (idempotencyKey) {
-      IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
+      await IdempotencyModel.save(idempotencyKey, JSON.stringify(response));
     }
 
     return res.status(201).json(response.body);
@@ -191,7 +191,7 @@ router.get('/', requireApiKey, async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    const submissions = SubmissionModel.findAll(limit, offset);
+    const submissions = await SubmissionModel.findAll(limit, offset);
     return res.json({
       submissions,
       count: submissions.length,
@@ -207,8 +207,8 @@ router.get('/', requireApiKey, async (req: Request, res: Response) => {
 // GET /api/submissions/:id - Get single submission (admin)
 router.get('/:id', requireApiKey, async (req: Request, res: Response) => {
   try {
-    const submission = SubmissionModel.findById(req.params.id);
-    
+    const submission = await SubmissionModel.findById(req.params.id);
+
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
@@ -223,8 +223,8 @@ router.get('/:id', requireApiKey, async (req: Request, res: Response) => {
 // DELETE /api/submissions/:id - Delete submission (admin / GDPR)
 router.delete('/:id', requireApiKey, async (req: Request, res: Response) => {
   try {
-    const deleted = SubmissionModel.delete(req.params.id);
-    
+    const deleted = await SubmissionModel.delete(req.params.id);
+
     if (!deleted) {
       return res.status(404).json({ error: 'Submission not found' });
     }

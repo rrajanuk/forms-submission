@@ -11,6 +11,14 @@ export interface Organization {
   updated_at: number;
 }
 
+export interface UserCreate {
+  organization_id: string;
+  email: string;
+  password: string;
+  name?: string;
+  role?: 'owner' | 'admin' | 'member';
+}
+
 export interface User {
   id: string;
   organization_id: string;
@@ -19,6 +27,8 @@ export interface User {
   role: 'owner' | 'admin' | 'member';
   created_at: number;
   last_login_at?: number;
+  email_verified?: number;
+  email_verified_at?: number;
 }
 
 export interface UserWithPassword extends User {

@@ -1,71 +1,86 @@
-import db from '../db/database';
-import { v4 as uuidv4 } from 'uuid';
+import prisma from '../db/prisma';
 import { ApiKey, ApiKeyCreate } from '../types/auth';
 import { generateApiKey, hashApiKey } from '../utils/password';
+/**
+ * Convert Prisma bigint to number for timestamp fields
+ * Prisma returns bigint for BigInt columns, but our TypeScript types use number
+ */
+const toNum = (v: any): any => (typeof v === 'bigint' ? Number(v) : v ?? undefined);
 
+
+/**
+ * API Key Model - Prisma Implementation
+ */
 export class ApiKeyModel {
-  static create(data: ApiKeyCreate & { raw_key?: string }): { apiKey: ApiKey; rawKey: string } {
-    const stmt = db.prepare(`
-      INSERT INTO api_keys (id, user_id, organization_id, key_hash, name, scopes, expires_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const id = uuidv4();
+  static async create(data: ApiKeyCreate & { raw_key?: string }): Promise<{ apiKey: ApiKey; rawKey: string }> {
+    const now = Date.now();
     const rawKey = data.raw_key || generateApiKey();
     const key_hash = hashApiKey(rawKey);
-    const created_at = Date.now();
 
-    stmt.run(
-      id,
-      data.user_id,
-      data.organization_id,
-      key_hash,
-      data.name || null,
-      JSON.stringify(data.scopes),
-      data.expires_at || null,
-      created_at
-    );
-
-    return {
-      apiKey: {
-        id,
+    const apiKey = await prisma.apiKey.create({
+      data: {
         user_id: data.user_id,
         organization_id: data.organization_id,
         key_hash,
         name: data.name,
+        scopes: JSON.stringify(data.scopes),
+        expires_at: data.expires_at || null,
+        created_at: now,
+      },
+    });
+
+    return {
+      apiKey: {
+        id: apiKey.id,
+        user_id: apiKey.user_id,
+        organization_id: apiKey.organization_id,
+        key_hash: apiKey.key_hash,
+        name: apiKey.name || undefined,
         scopes: data.scopes,
-        expires_at: data.expires_at,
-        created_at,
+        expires_at: apiKey.expires_at ? toNum(apiKey.expires_at) : undefined,
+        created_at: toNum(apiKey.created_at),
       },
       rawKey,
     };
   }
 
-  static findById(id: string): ApiKey | undefined {
-    const stmt = db.prepare('SELECT * FROM api_keys WHERE id = ?');
-    const row = stmt.get(id) as any;
+  static async findById(id: string): Promise<ApiKey | undefined> {
+    const row = await prisma.apiKey.findUnique({ where: { id } });
     if (!row) return undefined;
 
     return {
-      ...row,
+      id: row.id,
+      user_id: row.user_id,
+      organization_id: row.organization_id,
+      key_hash: row.key_hash,
+      name: row.name || undefined,
       scopes: JSON.parse(row.scopes),
+      last_used_at: row.last_used_at ? toNum(row.last_used_at) : undefined,
+      expires_at: row.expires_at ? toNum(row.expires_at) : undefined,
+      created_at: toNum(row.created_at),
     };
   }
 
-  static findByKeyHash(keyHash: string): ApiKey | undefined {
-    const stmt = db.prepare('SELECT * FROM api_keys WHERE key_hash = ?');
-    const row = stmt.get(keyHash) as any;
+  static async findByKeyHash(keyHash: string): Promise<ApiKey | undefined> {
+    const row = await prisma.apiKey.findUnique({ where: { key_hash: keyHash } });
     if (!row) return undefined;
 
     return {
-      ...row,
+      id: row.id,
+      user_id: row.user_id,
+      organization_id: row.organization_id,
+      key_hash: row.key_hash,
+      name: row.name || undefined,
       scopes: JSON.parse(row.scopes),
+      last_used_at: row.last_used_at ? toNum(row.last_used_at) : undefined,
+      expires_at: row.expires_at ? toNum(row.expires_at) : undefined,
+      created_at: toNum(row.created_at),
     };
   }
 
-  static validate(rawKey: string): ApiKey | null {
+  static async validate(rawKey: string): Promise<ApiKey | null> {
     const keyHash = hashApiKey(rawKey);
-    const apiKey = this.findByKeyHash(keyHash);
+    const apiKey = await this.findByKeyHash(keyHash);
 
     if (!apiKey) {
       return null;
@@ -79,65 +94,83 @@ export class ApiKeyModel {
     return apiKey;
   }
 
-  static findByOrganization(organizationId: string, limit = 100, offset = 0): ApiKey[] {
-    const stmt = db.prepare(`
-      SELECT * FROM api_keys
-      WHERE organization_id = ?
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
-    `);
-    const rows = stmt.all(organizationId, limit, offset) as any[];
+  static async findByOrganization(organizationId: string, limit = 100, offset = 0): Promise<ApiKey[]> {
+    const rows = await prisma.apiKey.findMany({
+      where: { organization_id: organizationId },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      skip: offset,
+    });
 
     return rows.map(row => ({
-      ...row,
+      id: row.id,
+      user_id: row.user_id,
+      organization_id: row.organization_id,
+      key_hash: row.key_hash,
+      name: row.name || undefined,
       scopes: JSON.parse(row.scopes),
+      last_used_at: row.last_used_at ? toNum(row.last_used_at) : undefined,
+      expires_at: row.expires_at ? toNum(row.expires_at) : undefined,
+      created_at: toNum(row.created_at),
     }));
   }
 
-  static findByUser(userId: string, limit = 100, offset = 0): ApiKey[] {
-    const stmt = db.prepare(`
-      SELECT * FROM api_keys
-      WHERE user_id = ?
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
-    `);
-    const rows = stmt.all(userId, limit, offset) as any[];
+  static async findByUser(userId: string, limit = 100, offset = 0): Promise<ApiKey[]> {
+    const rows = await prisma.apiKey.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      skip: offset,
+    });
 
     return rows.map(row => ({
-      ...row,
+      id: row.id,
+      user_id: row.user_id,
+      organization_id: row.organization_id,
+      key_hash: row.key_hash,
+      name: row.name || undefined,
       scopes: JSON.parse(row.scopes),
+      last_used_at: row.last_used_at ? toNum(row.last_used_at) : undefined,
+      expires_at: row.expires_at ? toNum(row.expires_at) : undefined,
+      created_at: toNum(row.created_at),
     }));
   }
 
-  static updateLastUsed(id: string): void {
-    const stmt = db.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?');
-    stmt.run(Date.now(), id);
+  static async updateLastUsed(id: string): Promise<void> {
+    await prisma.apiKey.update({
+      where: { id },
+      data: { last_used_at: Date.now() },
+    });
   }
 
-  static delete(id: string): boolean {
-    const stmt = db.prepare('DELETE FROM api_keys WHERE id = ?');
-    const result = stmt.run(id);
-    return result.changes > 0;
+  static async delete(id: string): Promise<boolean> {
+    try {
+      await prisma.apiKey.delete({ where: { id } });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  static deleteByUser(userId: string): number {
-    const stmt = db.prepare('DELETE FROM api_keys WHERE user_id = ?');
-    const result = stmt.run(userId);
-    return result.changes;
-  }
-
-  static countByOrganization(organizationId: string): number {
-    const stmt = db.prepare('SELECT COUNT(*) as count FROM api_keys WHERE organization_id = ?');
-    const result = stmt.get(organizationId) as { count: number };
+  static async deleteByUser(userId: string): Promise<number> {
+    const result = await prisma.apiKey.deleteMany({
+      where: { user_id: userId },
+    });
     return result.count;
   }
 
-  /**
-   * Cleanup expired API keys
-   */
-  static cleanupExpired(): number {
-    const stmt = db.prepare('DELETE FROM api_keys WHERE expires_at < ?');
-    const result = stmt.run(Date.now());
-    return result.changes;
+  static async countByOrganization(organizationId: string): Promise<number> {
+    return prisma.apiKey.count({
+      where: { organization_id: organizationId },
+    });
+  }
+
+  static async cleanupExpired(): Promise<number> {
+    const result = await prisma.apiKey.deleteMany({
+      where: {
+        expires_at: { lt: Date.now() },
+      },
+    });
+    return result.count;
   }
 }

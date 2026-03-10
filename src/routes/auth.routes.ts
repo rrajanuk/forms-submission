@@ -13,7 +13,7 @@ const router = Router();
 /**
  * Helper to generate slug from organization name
  */
-function generateSlug(name: string): string {
+async function generateSlug(name: string): Promise<string> {
   const base = name
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '')
@@ -24,7 +24,7 @@ function generateSlug(name: string): string {
   let counter = 1;
 
   // Ensure slug is unique
-  while (OrganizationModel.findBySlug(slug)) {
+  while (await OrganizationModel.findBySlug(slug)) {
     slug = `${base}-${counter}`;
     counter++;
   }
@@ -50,33 +50,36 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     // Check if user already exists
-    const existingUser = UserModel.findByEmail(data.email);
+    const existingUser = await UserModel.findByEmail(data.email);
     if (existingUser) {
       return res.status(409).json({ error: 'Email already registered' });
     }
 
     // Check if slug is taken
-    const slug = data.organization_slug || generateSlug(data.organization_name);
+    const slug = data.organization_slug || await generateSlug(data.organization_name);
 
-    if (OrganizationModel.findBySlug(slug)) {
+    const existingOrg = await OrganizationModel.findBySlug(slug);
+    if (existingOrg) {
       return res.status(409).json({ error: 'Organization slug already taken' });
     }
 
     // Create organization
-    const organization = OrganizationModel.create({
+    const organization = await OrganizationModel.create({
       name: data.organization_name,
       slug,
       plan: 'free',
     });
 
     // Create user with verification token
-    const { user, verificationToken } = UserModel.createWithVerificationToken({
+    const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+    const { user } = await UserModel.createWithVerificationToken({
       organization_id: organization.id,
       email: data.email,
       password: data.password,
       name: data.name,
       role: 'owner',
-    });
+    }, verificationToken, expiresAt);
 
     // Generate tokens
     const accessToken = generateAccessToken({
@@ -86,10 +89,10 @@ router.post('/register', async (req: Request, res: Response) => {
       role: user.role,
     });
 
-    const refreshToken = RefreshTokenModel.create(user.id);
+    const refreshToken = await RefreshTokenModel.create(user.id);
 
     // Create default API key for convenience
-    const { rawKey } = ApiKeyModel.create({
+    const { rawKey } = await ApiKeyModel.create({
       user_id: user.id,
       organization_id: organization.id,
       name: 'Default API Key',
@@ -146,7 +149,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Find user
-    const user = UserModel.findByEmail(data.email);
+    const user = await UserModel.findByEmailWithPassword(data.email);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -157,13 +160,13 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Get organization
-    const organization = OrganizationModel.findById(user.organization_id);
+    const organization = await OrganizationModel.findById(user.organization_id);
     if (!organization) {
       return res.status(500).json({ error: 'Organization not found' });
     }
 
     // Update last login
-    UserModel.updateLastLogin(user.id);
+    await UserModel.updateLastLogin(user.id);
 
     // Generate tokens
     const accessToken = generateAccessToken({
@@ -173,7 +176,7 @@ router.post('/login', async (req: Request, res: Response) => {
       role: user.role,
     });
 
-    const refreshToken = RefreshTokenModel.create(user.id);
+    const refreshToken = await RefreshTokenModel.create(user.id);
 
     const response: AuthResponse = {
       user: {
@@ -213,26 +216,26 @@ router.post('/refresh', async (req: Request, res: Response) => {
     }
 
     // Find refresh token
-    const refreshToken = RefreshTokenModel.findByToken(data.refreshToken);
+    const refreshToken = await RefreshTokenModel.findByToken(data.refreshToken);
     if (!refreshToken) {
       return res.status(401).json({ error: 'Invalid refresh token' });
     }
 
     // Check if token is valid
-    if (!RefreshTokenModel.isValid(refreshToken)) {
+    if (!RefreshTokenModel.isValid(refreshToken.token)) {
       // Revoke the token
-      RefreshTokenModel.revoke(data.refreshToken);
+      await RefreshTokenModel.revoke(data.refreshToken);
       return res.status(401).json({ error: 'Refresh token expired or revoked' });
     }
 
     // Get user
-    const user = UserModel.findById(refreshToken.user_id);
+    const user = await UserModel.findByEmailWithPassword(refreshToken.user_id);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
     // Get organization
-    const organization = OrganizationModel.findById(user.organization_id);
+    const organization = await OrganizationModel.findById(user.organization_id);
     if (!organization) {
       return res.status(500).json({ error: 'Organization not found' });
     }
@@ -264,7 +267,7 @@ router.post('/logout', async (req: Request, res: Response) => {
     const { refreshToken } = req.body;
 
     if (refreshToken) {
-      RefreshTokenModel.revoke(refreshToken);
+      await RefreshTokenModel.revoke(refreshToken);
     }
 
     res.json({ message: 'Logged out successfully' });
@@ -292,12 +295,12 @@ router.post('/me', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    const user = UserModel.findById(payload.sub);
+    const user = await UserModel.findById(payload.sub);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const organization = OrganizationModel.findById(user.organization_id);
+    const organization = await OrganizationModel.findById(user.organization_id);
     if (!organization) {
       return res.status(404).json({ error: 'Organization not found' });
     }
@@ -324,21 +327,18 @@ router.post('/verify-email', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Verification token is required' });
     }
 
-    const user = UserModel.findByVerificationToken(token);
+    const user = await UserModel.findByVerificationToken(token);
     if (!user) {
       return res.status(404).json({ error: 'Invalid verification token' });
     }
 
     // Check if token has expired
-    if (user.verification_token_expires_at && user.verification_token_expires_at < Date.now()) {
+    if ((user as any).verification_token_expires_at && (user as any).verification_token_expires_at < Date.now()) {
       return res.status(400).json({ error: 'Verification token has expired' });
     }
 
     // Verify email
-    const verified = UserModel.verifyEmail(user.id);
-    if (!verified) {
-      return res.status(500).json({ error: 'Failed to verify email' });
-    }
+    await UserModel.verifyEmail(user.id);
 
     res.json({
       message: 'Email verified successfully',
@@ -373,7 +373,7 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    const user = UserModel.findByIdWithPassword(payload.sub);
+    const user = await UserModel.findById(payload.sub);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -385,7 +385,8 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
 
     // Generate new verification token
     const verificationToken = require('crypto').randomBytes(32).toString('hex');
-    UserModel.setVerificationToken(user.id, verificationToken);
+    const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+    await UserModel.setVerificationToken(user.id, verificationToken, expiresAt);
 
     // Send verification email
     const emailResult = await sendVerificationEmail(

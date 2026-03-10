@@ -87,7 +87,7 @@ export const requireApiKeyMultiTenant = async (req: Request, res: Response, next
   }
 
   // Validate against database
-  const apiKeyData = ApiKeyModel.validate(apiKey);
+  const apiKeyData = await ApiKeyModel.validate(apiKey);
 
   if (!apiKeyData) {
     res.status(401).json({ error: 'Unauthorized - Invalid API key' });
@@ -95,7 +95,7 @@ export const requireApiKeyMultiTenant = async (req: Request, res: Response, next
   }
 
   // Update last used timestamp
-  ApiKeyModel.updateLastUsed(apiKeyData.id);
+  await ApiKeyModel.updateLastUsed(apiKeyData.id);
 
   // Attach user and organization info to request
   req.apiKeyUser = {
@@ -116,13 +116,13 @@ export const requireApiKeyMultiTenant = async (req: Request, res: Response, next
  * Use after requireJwt or requireApiKeyMultiTenant
  */
 export const requireScope = (...requiredScopes: string[]) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     // For JWT users, we'd need to check user's permissions
     // For API key users, check the key's scopes
     const apiKeyId = req.headers['x-api-key'];
 
     if (apiKeyId) {
-      const apiKeyData = ApiKeyModel.validate(apiKeyId as string);
+      const apiKeyData = await ApiKeyModel.validate(apiKeyId as string);
       if (!apiKeyData) {
         res.status(401).json({ error: 'Unauthorized' });
         return;

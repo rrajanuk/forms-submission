@@ -10,7 +10,7 @@ const router = Router();
 /**
  * Middleware to check form access and organization membership
  */
-const requireFormAccess = (req: Request, res: Response, next: Function) => {
+const requireFormAccess = async (req: Request, res: Response, next: Function) => {
   const user = (req as any).user;
   const formId = req.params.id || req.params.formId;
 
@@ -18,7 +18,7 @@ const requireFormAccess = (req: Request, res: Response, next: Function) => {
     return res.status(400).json({ error: 'Form ID required' });
   }
 
-  const form = FormModel.findById(formId);
+  const form = await FormModel.findById(formId);
   if (!form) {
     return res.status(404).json({ error: 'Form not found' });
   }
@@ -46,9 +46,9 @@ router.get('/', requireJwt, async (req: Request, res: Response) => {
 
     let forms;
     if (status) {
-      forms = FormModel.findByStatus(user.organization_id, status, limit, offset);
+      forms = await FormModel.findByStatus(status, user.organization_id);
     } else {
-      forms = FormModel.findByOrganization(user.organization_id, limit, offset);
+      forms = await FormModel.findByOrganization(user.organization_id, limit, offset);
     }
 
     res.json(forms);
@@ -134,14 +134,14 @@ router.post('/', requireJwt, async (req: Request, res: Response) => {
 
     // Check if slug is unique for organization
     if (slug) {
-      const existing = FormModel.findBySlug(user.organization_id, slug);
+      const existing = await FormModel.findBySlug(slug);
       if (existing) {
         return res.status(409).json({ error: 'Slug already taken' });
       }
     }
 
     // Create form
-    const form = FormModel.create({
+    const form = await FormModel.create({
       organization_id: user.organization_id,
       name,
       slug,
@@ -166,7 +166,7 @@ router.put('/:id', requireJwt, requireFormAccess, async (req: Request, res: Resp
 
     // Check slug uniqueness if changing
     if (slug && slug !== (req as any).form.slug) {
-      const existing = FormModel.findBySlug((req as any).form.organization_id, slug);
+      const existing = await FormModel.findBySlug(slug);
       if (existing) {
         return res.status(409).json({ error: 'Slug already taken' });
       }
@@ -208,7 +208,7 @@ router.put('/:id', requireJwt, requireFormAccess, async (req: Request, res: Resp
     }
 
     // Update form
-    const updated = FormModel.update(req.params.id, {
+    const updated = await FormModel.update(req.params.id, {
       name,
       slug,
       description,
@@ -244,7 +244,7 @@ router.post('/:id/publish', requireJwt, requireFormAccess, async (req: Request, 
       });
     }
 
-    const published = FormModel.publish(req.params.id);
+    const published = await FormModel.publish(req.params.id);
     res.json(published);
   } catch (error) {
     console.error('Publish form error:', error);
@@ -258,7 +258,7 @@ router.post('/:id/publish', requireJwt, requireFormAccess, async (req: Request, 
  */
 router.post('/:id/archive', requireJwt, requireFormAccess, async (req: Request, res: Response) => {
   try {
-    const archived = FormModel.archive(req.params.id);
+    const archived = await FormModel.archive(req.params.id);
     res.json(archived);
   } catch (error) {
     console.error('Archive form error:', error);
@@ -272,7 +272,7 @@ router.post('/:id/archive', requireJwt, requireFormAccess, async (req: Request, 
  */
 router.delete('/:id', requireJwt, requireFormAccess, async (req: Request, res: Response) => {
   try {
-    const deleted = FormModel.delete(req.params.id);
+    const deleted = await FormModel.delete(req.params.id);
 
     if (!deleted) {
       return res.status(404).json({ error: 'Form not found' });
@@ -293,12 +293,15 @@ router.get('/:id/analytics', requireJwt, requireFormAccess, async (req: Request,
   try {
     const form = (req as any).form;
 
-    const totalSubmissions = FormSubmissionModel.countByForm(form.id);
-    const completedSubmissions = FormSubmissionModel.countByForm(form.id);
+    const totalSubmissions = await FormSubmissionModel.countByForm(form.id);
+    const completedSubmissions = await FormSubmissionModel.countByForm(form.id);
 
     // Get submissions by status
-    const draftSubmissions = FormSubmissionModel.findByStatus('draft', 1000, 0).length;
-    const abandonedSubmissions = FormSubmissionModel.findByStatus('abandoned', 1000, 0).length;
+    const draftSubmissionsArray = await FormSubmissionModel.findByStatus('draft', 1000, 0);
+    const abandonedSubmissionsArray = await FormSubmissionModel.findByStatus('abandoned', 1000, 0);
+
+    const draftSubmissions = draftSubmissionsArray.length;
+    const abandonedSubmissions = abandonedSubmissionsArray.length;
 
     res.json({
       form_id: form.id,
@@ -329,7 +332,7 @@ router.post('/:id/duplicate', requireJwt, requireFormAccess, async (req: Request
     const form = (req as any).form;
 
     // Create duplicate with modified name
-    const duplicate = FormModel.create({
+    const duplicate = await FormModel.create({
       organization_id: form.organization_id,
       name: `${form.name} (Copy)`,
       description: form.description,

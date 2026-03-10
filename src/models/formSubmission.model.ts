@@ -1,40 +1,43 @@
-import db from '../db/database';
-import { v4 as uuidv4 } from 'uuid';
+import prisma from '../db/prisma';
 import { FormSubmission, SubmissionMetadata } from '../types/forms';
 
+/**
+ * Convert Prisma bigint to number
+ */
+const toNum = (v: any): any => (typeof v === 'bigint' ? Number(v) : v ?? undefined);
+
+/**
+ * Form Submission Model - Prisma Implementation
+ * All methods are now async
+ */
 export class FormSubmissionModel {
-  static create(data: {
+  static async create(data: {
     form_id: string;
     organization_id: string;
     submission_data: Record<string, any>;
     status?: 'draft' | 'complete' | 'abandoned';
     metadata?: SubmissionMetadata;
-  }): FormSubmission {
-    const stmt = db.prepare(`
-      INSERT INTO form_submissions (id, form_id, organization_id, submission_data, status, metadata, submitted_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const id = uuidv4();
+  }): Promise<FormSubmission> {
     const now = Date.now();
     const isComplete = data.status === 'complete';
 
-    stmt.run(
-      id,
-      data.form_id,
-      data.organization_id,
-      JSON.stringify(data.submission_data),
-      data.status || 'complete',
-      data.metadata ? JSON.stringify(data.metadata) : null,
-      isComplete ? now : null,
-      now,
-      now
-    );
+    const submission = await prisma.formSubmission.create({
+      data: {
+        form_id: data.form_id,
+        organization_id: data.organization_id,
+        submission_data: JSON.stringify(data.submission_data),
+        status: data.status || 'complete',
+        metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+        submitted_at: isComplete ? now : null,
+        created_at: now,
+        updated_at: now,
+      },
+    });
 
     return {
-      id,
-      form_id: data.form_id,
-      organization_id: data.organization_id,
+      id: submission.id,
+      form_id: submission.form_id,
+      organization_id: submission.organization_id,
       submission_data: data.submission_data,
       status: data.status || 'complete',
       metadata: data.metadata,
@@ -44,107 +47,99 @@ export class FormSubmissionModel {
     };
   }
 
-  static findById(id: string): FormSubmission | undefined {
-    const stmt = db.prepare('SELECT * FROM form_submissions WHERE id = ?');
-    const row = stmt.get(id) as any;
+  static async findById(id: string): Promise<FormSubmission | undefined> {
+    const row = await prisma.formSubmission.findUnique({
+      where: { id },
+    });
     if (!row) return undefined;
 
     return this.mapRowToSubmission(row);
   }
 
-  static findByForm(formId: string, limit = 100, offset = 0): FormSubmission[] {
-    const stmt = db.prepare(`
-      SELECT * FROM form_submissions
-      WHERE form_id = ?
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
-    `);
-    const rows = stmt.all(formId, limit, offset) as any[];
+  static async findByForm(formId: string, limit = 100, offset = 0): Promise<FormSubmission[]> {
+    const rows = await prisma.formSubmission.findMany({
+      where: { form_id: formId },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      skip: offset,
+    });
     return rows.map(row => this.mapRowToSubmission(row));
   }
 
-  static findByOrganization(organizationId: string, limit = 100, offset = 0): FormSubmission[] {
-    const stmt = db.prepare(`
-      SELECT * FROM form_submissions
-      WHERE organization_id = ?
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
-    `);
-    const rows = stmt.all(organizationId, limit, offset) as any[];
+  static async findByOrganization(organizationId: string, limit = 100, offset = 0): Promise<FormSubmission[]> {
+    const rows = await prisma.formSubmission.findMany({
+      where: { organization_id: organizationId },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      skip: offset,
+    });
     return rows.map(row => this.mapRowToSubmission(row));
   }
 
-  static findByStatus(status: 'draft' | 'complete' | 'abandoned', limit = 100, offset = 0): FormSubmission[] {
-    const stmt = db.prepare(`
-      SELECT * FROM form_submissions
-      WHERE status = ?
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
-    `);
-    const rows = stmt.all(status, limit, offset) as any[];
+  static async findByStatus(status: 'draft' | 'complete' | 'abandoned', limit = 100, offset = 0): Promise<FormSubmission[]> {
+    const rows = await prisma.formSubmission.findMany({
+      where: { status: status },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      skip: offset,
+    });
     return rows.map(row => this.mapRowToSubmission(row));
   }
 
-  static update(id: string, data: {
+  static async update(id: string, data: {
     submission_data?: Record<string, any>;
     status?: 'draft' | 'complete' | 'abandoned';
     metadata?: SubmissionMetadata;
-  }): FormSubmission | undefined {
-    const updates: string[] = [];
-    const values: any[] = [];
+  }): Promise<FormSubmission | undefined> {
+    try {
+      const current = await this.findById(id);
 
-    if (data.submission_data !== undefined) {
-      updates.push('submission_data = ?');
-      values.push(JSON.stringify(data.submission_data));
+      const submission = await prisma.formSubmission.update({
+        where: { id },
+        data: {
+          ...(data.submission_data !== undefined && {
+            submission_data: JSON.stringify(data.submission_data),
+          }),
+          ...(data.status !== undefined && {
+            status: data.status,
+            ...(data.status === 'complete' && current && !current.submitted_at && {
+              submitted_at: Date.now(),
+            }),
+          }),
+          ...(data.metadata !== undefined && {
+            metadata: JSON.stringify(data.metadata),
+          }),
+          updated_at: BigInt(Date.now()),
+        },
+      });
+
+      return this.mapRowToSubmission(submission);
+    } catch {
+      return undefined;
     }
-    if (data.status !== undefined) {
-      updates.push('status = ?');
-      values.push(data.status);
-
-      // Set submitted_at when completing
-      if (data.status === 'complete') {
-        const current = this.findById(id);
-        if (current && !current.submitted_at) {
-          updates.push('submitted_at = ?');
-          values.push(Date.now());
-        }
-      }
-    }
-    if (data.metadata !== undefined) {
-      updates.push('metadata = ?');
-      values.push(JSON.stringify(data.metadata));
-    }
-
-    if (updates.length === 0) {
-      return this.findById(id);
-    }
-
-    updates.push('updated_at = ?');
-    values.push(Date.now());
-    values.push(id);
-
-    const stmt = db.prepare(`UPDATE form_submissions SET ${updates.join(', ')} WHERE id = ?`);
-    stmt.run(...values);
-
-    return this.findById(id);
   }
 
-  static delete(id: string): boolean {
-    const stmt = db.prepare('DELETE FROM form_submissions WHERE id = ?');
-    const result = stmt.run(id);
-    return result.changes > 0;
+  static async delete(id: string): Promise<boolean> {
+    try {
+      await prisma.formSubmission.delete({
+        where: { id },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  static countByForm(formId: string): number {
-    const stmt = db.prepare('SELECT COUNT(*) as count FROM form_submissions WHERE form_id = ?');
-    const result = stmt.get(formId) as { count: number };
-    return result.count;
+  static async countByForm(formId: string): Promise<number> {
+    return prisma.formSubmission.count({
+      where: { form_id: formId },
+    });
   }
 
-  static countByOrganization(organizationId: string): number {
-    const stmt = db.prepare('SELECT COUNT(*) as count FROM form_submissions WHERE organization_id = ?');
-    const result = stmt.get(organizationId) as { count: number };
-    return result.count;
+  static async countByOrganization(organizationId: string): Promise<number> {
+    return prisma.formSubmission.count({
+      where: { organization_id: organizationId },
+    });
   }
 
   private static mapRowToSubmission(row: any): FormSubmission {
@@ -155,9 +150,9 @@ export class FormSubmissionModel {
       submission_data: JSON.parse(row.submission_data),
       status: row.status,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      submitted_at: row.submitted_at,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
+      submitted_at: row.submitted_at ? toNum(row.submitted_at) : undefined,
+      created_at: toNum(row.created_at),
+      updated_at: toNum(row.updated_at),
     };
   }
 }

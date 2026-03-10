@@ -1,65 +1,92 @@
-import db from '../db/database';
-import { v4 as uuidv4 } from 'uuid';
+import prisma from '../db/prisma';
 import { RefreshToken } from '../types/auth';
 
+const toNum = (v: any): any => (typeof v === 'bigint' ? Number(v) : v ?? undefined);
+
 export class RefreshTokenModel {
-  static create(userId: string, expiresIn: number = 7 * 24 * 60 * 60 * 1000): RefreshToken {
-    const stmt = db.prepare(`
-      INSERT INTO refresh_tokens (id, user_id, token, expires_at, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
-    const id = uuidv4();
-    const token = Buffer.from(`${id}:${uuidv4()}:${Date.now()}`).toString('base64url');
-    const created_at = Date.now();
-    const expires_at = created_at + expiresIn;
-
-    stmt.run(id, userId, token, expires_at, created_at);
-
-    return { id, user_id: userId, token, expires_at, created_at };
+  static async create(userId: string): Promise<RefreshToken> {
+    // Generate a random token
+    const generatedToken = Array.from({ length: 32 }, () => 
+      Math.random().toString(36)[2] || '0'
+    ).join('');
+    
+    const result = await prisma.refreshToken.create({
+      data: {
+        user_id: userId,
+        token: generatedToken,
+        expires_at: Date.now() + (7 * 24 * 60 * 60 * 1000),
+        created_at: Date.now(),
+      },
+    });
+    return this.mapRowToToken(result);
   }
 
-  static findByToken(token: string): RefreshToken | undefined {
-    const stmt = db.prepare('SELECT * FROM refresh_tokens WHERE token = ? AND revoked_at IS NULL');
-    return stmt.get(token) as RefreshToken | undefined;
+  static async findByToken(token: string): Promise<RefreshToken | undefined> {
+    const row = await prisma.refreshToken.findUnique({ where: { token } });
+    return row ? this.mapRowToToken(row) : undefined;
   }
 
-  static revoke(token: string): boolean {
-    const stmt = db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE token = ?');
-    const result = stmt.run(Date.now(), token);
-    return result.changes > 0;
+  static async findByUserId(userId: string): Promise<RefreshToken[]> {
+    const tokens = await prisma.refreshToken.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
+    });
+    return tokens.map(t => this.mapRowToToken(t));
   }
 
-  static revokeAllForUser(userId: string): number {
-    const stmt = db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL');
-    const result = stmt.run(Date.now(), userId);
-    return result.changes;
+  static async revoke(token: string): Promise<boolean> {
+    try {
+      await prisma.refreshToken.update({
+        where: { token },
+        data: { revoked_at: Date.now() },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  static isExpired(token: RefreshToken): boolean {
-    return token.expires_at < Date.now();
+  static async revokeAllForUser(userId: string): Promise<void> {
+    await prisma.refreshToken.updateMany({
+      where: { user_id: userId },
+      data: { revoked_at: Date.now() },
+    });
   }
 
-  static isRevoked(token: RefreshToken): boolean {
-    return token.revoked_at !== undefined && token.revoked_at !== null;
+  static async delete(token: string): Promise<boolean> {
+    try {
+      await prisma.refreshToken.delete({ where: { token } });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  static isValid(token: RefreshToken): boolean {
-    return !this.isExpired(token) && !this.isRevoked(token);
+  static async deleteExpired(): Promise<number> {
+    const result = await prisma.refreshToken.deleteMany({
+      where: {
+        expires_at: { lt: Date.now() },
+      },
+    });
+    return result.count;
   }
 
-  /**
-   * Delete expired and revoked tokens
-   */
-  static cleanup(): number {
-    const stmt = db.prepare('DELETE FROM refresh_tokens WHERE expires_at < ? OR revoked_at IS NOT NULL');
-    const result = stmt.run(Date.now());
-    return result.changes;
+  static async isValid(refreshToken: string): Promise<boolean> {
+    const tokenRecord = await this.findByToken(refreshToken);
+    if (!tokenRecord) return false;
+    if (tokenRecord.revoked_at) return false;
+    if (tokenRecord.expires_at < Date.now()) return false;
+    return true;
   }
 
-  static deleteByUser(userId: string): number {
-    const stmt = db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?');
-    const result = stmt.run(userId);
-    return result.changes;
+  private static mapRowToToken(row: any): RefreshToken {
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      token: row.token,
+      expires_at: toNum(row.expires_at),
+      created_at: toNum(row.created_at),
+      revoked_at: row.revoked_at ? toNum(row.revoked_at) : undefined,
+    };
   }
 }

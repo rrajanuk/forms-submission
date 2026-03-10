@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import app from './app';
-import { runMigrations as migrate } from './db/migrate';
+// import { runMigrations as migrate } from './db/migrate'; // Disabled after Prisma migration
 import { IdempotencyModel } from './models/idempotency.model';
 import { AutoSaveService } from './services/autoSave.service';
 
@@ -18,30 +18,39 @@ if (missing.length > 0) {
 }
 
 // Run database migrations
-try {
-  migrate();
-} catch (error) {
-  console.error('Migration failed:', error);
-  process.exit(1);
-}
+// NOTE: Old SQL migrations disabled after Prisma migration
+// try {
+//   migrate();
+// } catch (error) {
+//   console.error('Migration failed:', error);
+//   process.exit(1);
+// }
 
 // Cleanup old idempotency keys on startup (older than 7 days)
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-const cleaned = IdempotencyModel.cleanup(SEVEN_DAYS);
-console.log(`Cleaned up ${cleaned} old idempotency keys`);
 
-// Cleanup expired drafts on startup
-const draftCleanup = AutoSaveService.cleanupExpiredDrafts();
-console.log(`Cleaned up ${draftCleanup.count} expired drafts`);
+async function startup() {
+  const cleaned = await IdempotencyModel.cleanup(SEVEN_DAYS);
+  console.log(`Cleaned up ${cleaned} old idempotency keys`);
+
+  // Cleanup expired drafts on startup
+  const draftCleanup = await AutoSaveService.cleanupExpiredDrafts();
+  console.log(`Cleaned up ${draftCleanup.count} expired drafts`);
+}
+
+startup().catch(error => {
+  console.error('Startup failed:', error);
+  process.exit(1);
+});
 
 // Schedule periodic cleanup (every 24 hours)
-setInterval(() => {
-  const cleaned = IdempotencyModel.cleanup(SEVEN_DAYS);
+setInterval(async () => {
+  const cleaned = await IdempotencyModel.cleanup(SEVEN_DAYS);
   if (cleaned > 0) {
     console.log(`Cleaned up ${cleaned} old idempotency keys`);
   }
 
-  const draftCleaned = AutoSaveService.cleanupExpiredDrafts();
+  const draftCleaned = await AutoSaveService.cleanupExpiredDrafts();
   if (draftCleaned.count > 0) {
     console.log(`Cleaned up ${draftCleaned.count} expired drafts`);
   }

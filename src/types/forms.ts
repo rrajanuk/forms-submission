@@ -167,6 +167,14 @@ export interface FormSubmission {
   updated_at: number;
 }
 
+export interface DraftSubmissionCreate {
+  form_id: string;
+  session_id: string;
+  submission_data: Record<string, any>;
+  current_step?: number;
+  expires_at?: number;
+}
+
 export interface DraftSubmission {
   id: string;
   form_id: string;

@@ -1,0 +1,257 @@
+// This is your Prisma schema file,
+// learn more about the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Migration tracking
+model Migrations {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  executed_at BigInt
+
+  @@map("_migrations")
+}
+
+// Multi-Tenancy
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("free")
+  created_at BigInt
+  updated_at BigInt
+
+  users        User[]
+  api_keys     ApiKey[]
+  forms        Form[]
+  form_submissions FormSubmission[]
+  form_views   FormView[]
+  webhooks     Webhook[]
+
+  @@index([slug])
+  @@index([plan])
+  @@map("organizations")
+}
+
+model User {
+  id                       String   @id @default(uuid())
+  organization_id          String
+  email                    String   @unique
+  password_hash            String
+  name                     String?
+  role                     String   @default("member")
+  created_at               BigInt
+  last_login_at            BigInt?
+  email_verified           Int      @default(0)
+  email_verified_at        BigInt?
+  verification_token       String?
+  verification_token_expires_at BigInt?
+
+  organization             Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  api_keys                 ApiKey[]
+  refresh_tokens           RefreshToken[]
+
+  @@index([email])
+  @@index([organization_id])
+  @@unique([verification_token])
+  @@map("users")
+}
+
+model ApiKey {
+  id              String   @id @default(uuid())
+  user_id         String
+  organization_id String
+  key_hash        String   @unique
+  name            String?
+  scopes          String
+  last_used_at    BigInt?
+  expires_at      BigInt?
+  created_at      BigInt
+
+  user            User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([organization_id])
+  @@index([key_hash])
+  @@map("api_keys")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  user_id    String
+  token      String   @unique
+  expires_at BigInt
+  created_at BigInt
+  revoked_at BigInt?
+
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([token])
+  @@index([expires_at])
+  @@map("refresh_tokens")
+}
+
+// Forms
+model Form {
+  id          String   @id @default(uuid())
+  organization_id String
+  name        String
+  slug        String?
+  description String?
+  schema      String
+  status      String   @default("draft")
+  settings    String?
+  created_at  BigInt
+  updated_at  BigInt
+  published_at BigInt?
+
+  organization        Organization       @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  form_submissions    FormSubmission[]
+  draft_submissions   DraftSubmission[]
+  form_views          FormView[]
+  webhooks            Webhook[]
+
+  @@index([organization_id])
+  @@index([status])
+  @@index([organization_id, slug])
+  @@map("forms")
+}
+
+model FormSubmission {
+  id              String   @id @default(uuid())
+  form_id         String
+  organization_id String
+  submission_data String
+  status          String   @default("complete")
+  metadata        String?
+  submitted_at    BigInt?
+  created_at      BigInt
+  updated_at      BigInt
+
+  form            Form         @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([form_id])
+  @@index([organization_id])
+  @@index([status])
+  @@index([created_at])
+  @@map("form_submissions")
+}
+
+model DraftSubmission {
+  id              String   @id @default(uuid())
+  form_id         String
+  session_id      String
+  submission_data String
+  current_step    Int      @default(0)
+  created_at      BigInt
+  updated_at      BigInt
+  expires_at      BigInt
+
+  form            Form     @relation(fields: [form_id], references: [id], onDelete: Cascade)
+
+  @@index([form_id])
+  @@index([session_id])
+  @@index([expires_at])
+  @@map("draft_submissions")
+}
+
+model FormView {
+  id          String   @id @default(uuid())
+  form_id     String
+  organization_id String
+  session_id  String?
+  started_at  BigInt
+  completed_at BigInt?
+  last_step   Int?
+  dropped_at  BigInt?
+  referrer    String?
+  utm_source  String?
+  utm_medium  String?
+  utm_campaign String?
+
+  form        Form         @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([form_id])
+  @@index([started_at])
+  @@map("form_views")
+}
+
+// Webhooks
+model Webhook {
+  id              String   @id @default(uuid())
+  organization_id String
+  form_id         String?
+  url             String
+  events          String
+  secret          String?
+  active          Int      @default(1)
+  created_at      BigInt
+
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  form            Form?        @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  deliveries      WebhookDelivery[]
+
+  @@index([organization_id])
+  @@index([form_id])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id            String   @id @default(uuid())
+  webhook_id    String
+  event_type    String
+  payload       String
+  response_code Int?
+  response_body String?
+  attempted_at  BigInt
+  success       Int      @default(0)
+
+  webhook       Webhook  @relation(fields: [webhook_id], references: [id], onDelete: Cascade)
+
+  @@index([webhook_id])
+  @@index([attempted_at])
+  @@map("webhook_deliveries")
+}
+
+// Legacy Submissions
+model Submission {
+  id         String   @id
+  created_at BigInt
+  name       String
+  email      String
+  phone      String?
+  industry   String
+  message    String
+  ip         String?
+  user_agent String?
+  page_url   String?
+  utm        String?
+  status     String   @default("new")
+
+  @@index([email])
+  @@index([created_at])
+  @@index([status])
+  @@index([ip])
+  @@map("submissions")
+}
+
+// Idempotency Keys
+model IdempotencyKey {
+  key        String   @id
+  response   String
+  created_at BigInt
+
+  @@index([created_at])
+  @@map("idempotency_keys")
+}

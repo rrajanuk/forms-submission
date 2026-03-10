@@ -1,195 +1,253 @@
-import db from '../db/database';
-import { v4 as uuidv4 } from 'uuid';
-import { User, UserWithPassword } from '../types/auth';
+import prisma from '../db/prisma';
+import { User, UserCreate, UserWithPassword } from '../types/auth';
 import { hashPassword } from '../utils/password';
+/**
+ * Convert Prisma bigint to number for timestamp fields
+ * Prisma returns bigint for BigInt columns, but our TypeScript types use number
+ */
+const toNum = (v: any): any => (typeof v === 'bigint' ? Number(v) : v ?? undefined);
 
+
+/**
+ * User Model - Prisma Implementation
+ */
 export class UserModel {
-  static create(data: {
-    organization_id: string;
-    email: string;
-    password: string;
-    name?: string;
-    role?: 'owner' | 'admin' | 'member';
-  }): User {
-    const stmt = db.prepare(`
-      INSERT INTO users (id, organization_id, email, password_hash, name, role, created_at, email_verified)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-    `);
-
-    const id = uuidv4();
-    const created_at = Date.now();
-    const password_hash = hashPassword(data.password);
-
-    stmt.run(
-      id,
-      data.organization_id,
-      data.email,
-      password_hash,
-      data.name || null,
-      data.role || 'member',
-      created_at
-    );
+  static async create(data: UserCreate): Promise<User> {
+    const password_hash = await hashPassword(data.password);
+    const user = await prisma.user.create({
+      data: {
+        organization_id: data.organization_id,
+        email: data.email,
+        password_hash,
+        name: data.name,
+        role: data.role || 'member',
+        created_at: Date.now(),
+      },
+    });
 
     return {
-      id,
-      organization_id: data.organization_id,
-      email: data.email,
-      name: data.name,
-      role: data.role || 'member',
-      created_at,
+      id: user.id,
+      organization_id: user.organization_id,
+      email: user.email,
+      name: user.name || undefined,
+      role: user.role as User['role'],
+      created_at: toNum(user.created_at),
+      last_login_at: user.last_login_at ? toNum(user.last_login_at) : undefined,
+      email_verified: user.email_verified,
+      email_verified_at: user.email_verified_at ? toNum(user.email_verified_at) : undefined,
     };
   }
 
-  static createWithVerificationToken(data: {
-    organization_id: string;
-    email: string;
-    password: string;
-    name?: string;
-    role?: 'owner' | 'admin' | 'member';
-  }): { user: User; verificationToken: string } {
-    const id = uuidv4();
-    const created_at = Date.now();
-    const password_hash = hashPassword(data.password);
-    const verificationToken = uuidv4();
-    const tokenExpiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+  static async findById(id: string): Promise<User | undefined> {
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return undefined;
 
-    const stmt = db.prepare(`
-      INSERT INTO users (id, organization_id, email, password_hash, name, role, created_at, email_verified, verification_token, verification_token_expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-    `);
+    return {
+      id: user.id,
+      organization_id: user.organization_id,
+      email: user.email,
+      name: user.name || undefined,
+      role: user.role as User['role'],
+      created_at: toNum(user.created_at),
+      last_login_at: user.last_login_at ? toNum(user.last_login_at) : undefined,
+      email_verified: user.email_verified,
+      email_verified_at: user.email_verified_at ? toNum(user.email_verified_at) : undefined,
+    };
+  }
 
-    stmt.run(
-      id,
-      data.organization_id,
-      data.email,
-      password_hash,
-      data.name || null,
-      data.role || 'member',
-      created_at,
-      verificationToken,
-      tokenExpiresAt
-    );
+  static async findByEmail(email: string): Promise<User | undefined> {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return undefined;
+
+    return {
+      id: user.id,
+      organization_id: user.organization_id,
+      email: user.email,
+      name: user.name || undefined,
+      role: user.role as User['role'],
+      created_at: toNum(user.created_at),
+      last_login_at: user.last_login_at ? toNum(user.last_login_at) : undefined,
+      email_verified: user.email_verified,
+      email_verified_at: user.email_verified_at ? toNum(user.email_verified_at) : undefined,
+    };
+  }
+
+  static async findByEmailWithPassword(email: string): Promise<UserWithPassword | undefined> {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return undefined;
+
+    return {
+      id: user.id,
+      organization_id: user.organization_id,
+      email: user.email,
+      password_hash: user.password_hash,
+      name: user.name || undefined,
+      role: user.role as User['role'],
+      created_at: toNum(user.created_at),
+      last_login_at: user.last_login_at ? toNum(user.last_login_at) : undefined,
+      
+      
+    };
+  }
+
+  static async findByOrganization(organizationId: string, limit = 100, offset = 0): Promise<User[]> {
+    const users = await prisma.user.findMany({
+      where: { organization_id: organizationId },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      skip: offset,
+    });
+
+    return users.map(user => ({
+      id: user.id,
+      organization_id: user.organization_id,
+      email: user.email,
+      name: user.name || undefined,
+      role: user.role as User['role'],
+      created_at: toNum(user.created_at),
+      last_login_at: user.last_login_at ? toNum(user.last_login_at) : undefined,
+      
+      
+    }));
+  }
+
+  static async updateLastLogin(id: string): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: { last_login_at: Date.now() },
+    });
+  }
+
+  static async updateEmailVerified(id: string): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: {
+        email_verified: 1,
+        email_verified_at: Date.now(),
+      },
+    });
+  }
+
+  static async setVerificationToken(id: string, token: string, expiresAt: number): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: {
+        verification_token: token,
+        verification_token_expires_at: expiresAt,
+      },
+    });
+  }
+
+  static async createWithVerificationToken(data: UserCreate, token: string, expiresAt: number): Promise<{ user: User; verificationToken: string }> {
+    const password_hash = await hashPassword(data.password);
+    const user = await prisma.user.create({
+      data: {
+        organization_id: data.organization_id,
+        email: data.email,
+        password_hash,
+        name: data.name,
+        role: data.role || 'owner',
+        created_at: Date.now(),
+        verification_token: token,
+        verification_token_expires_at: expiresAt,
+      },
+    });
 
     return {
       user: {
-        id,
-        organization_id: data.organization_id,
-        email: data.email,
-        name: data.name,
-        role: data.role || 'member',
-        created_at,
+        id: user.id,
+        organization_id: user.organization_id,
+        email: user.email,
+        name: user.name || undefined,
+        role: user.role as User['role'],
+        created_at: toNum(user.created_at),
+        last_login_at: user.last_login_at ? toNum(user.last_login_at) : undefined,
       },
-      verificationToken,
+      verificationToken: token,
     };
   }
 
-  static findByVerificationToken(token: string): UserWithPassword | undefined {
-    const stmt = db.prepare('SELECT * FROM users WHERE verification_token = ?');
-    return stmt.get(token) as UserWithPassword | undefined;
+  static async clearVerificationToken(id: string): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: {
+        verification_token: null,
+        verification_token_expires_at: null,
+      },
+    });
   }
 
-  static verifyEmail(userId: string): boolean {
-    const stmt = db.prepare(`
-      UPDATE users
-      SET email_verified = 1,
-          email_verified_at = ?,
-          verification_token = NULL,
-          verification_token_expires_at = NULL
-      WHERE id = ?
-    `);
-    const result = stmt.run(Date.now(), userId);
-    return result.changes > 0;
+  static async findByVerificationToken(token: string): Promise<User | undefined> {
+    const user = await prisma.user.findFirst({
+      where: {
+        verification_token: token,
+        verification_token_expires_at: { gt: Date.now() },
+      },
+    });
+
+    if (!user) return undefined;
+
+    return {
+      id: user.id,
+      organization_id: user.organization_id,
+      email: user.email,
+      name: user.name || undefined,
+      role: user.role as User['role'],
+      created_at: toNum(user.created_at),
+      last_login_at: user.last_login_at ? toNum(user.last_login_at) : undefined,
+      email_verified: user.email_verified,
+      email_verified_at: user.email_verified_at ? toNum(user.email_verified_at) : undefined,
+    };
   }
 
-  static setVerificationToken(userId: string, token: string): boolean {
-    const tokenExpiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-    const stmt = db.prepare(`
-      UPDATE users
-      SET verification_token = ?,
-          verification_token_expires_at = ?
-      WHERE id = ?
-    `);
-    const result = stmt.run(token, tokenExpiresAt, userId);
-    return result.changes > 0;
-  }
+  static async update(id: string, data: Partial<Pick<User, 'name' | 'role'>>): Promise<User | undefined> {
+    try {
+      const user = await prisma.user.update({
+        where: { id },
+        data: {
+          ...(data.name !== undefined && { name: data.name }),
+          ...(data.role !== undefined && { role: data.role }),
+        },
+      });
 
-  static findById(id: string): User | undefined {
-    const stmt = db.prepare('SELECT id, organization_id, email, name, role, created_at, last_login_at FROM users WHERE id = ?');
-    return stmt.get(id) as User | undefined;
-  }
-
-  static findByIdWithPassword(id: string): UserWithPassword | undefined {
-    const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
-    return stmt.get(id) as UserWithPassword | undefined;
-  }
-
-  static findByEmail(email: string): UserWithPassword | undefined {
-    const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
-    return stmt.get(email) as UserWithPassword | undefined;
-  }
-
-  static findByOrganization(organizationId: string, limit = 100, offset = 0): User[] {
-    const stmt = db.prepare(`
-      SELECT id, organization_id, email, name, role, created_at, last_login_at
-      FROM users
-      WHERE organization_id = ?
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
-    `);
-    return stmt.all(organizationId, limit, offset) as User[];
-  }
-
-  static update(id: string, data: {
-    name?: string;
-    role?: 'owner' | 'admin' | 'member';
-    email?: string;
-    password?: string;
-  }): User | undefined {
-    const updates: string[] = [];
-    const values: any[] = [];
-
-    if (data.name !== undefined) {
-      updates.push('name = ?');
-      values.push(data.name);
+      return {
+        id: user.id,
+        organization_id: user.organization_id,
+        email: user.email,
+        name: user.name || undefined,
+        role: user.role as User['role'],
+        created_at: toNum(user.created_at),
+        last_login_at: user.last_login_at ? toNum(user.last_login_at) : undefined,
+        
+        
+      };
+    } catch {
+      return undefined;
     }
-    if (data.role !== undefined) {
-      updates.push('role = ?');
-      values.push(data.role);
-    }
-    if (data.email !== undefined) {
-      updates.push('email = ?');
-      values.push(data.email);
-    }
-    if (data.password !== undefined) {
-      updates.push('password_hash = ?');
-      values.push(hashPassword(data.password));
-    }
-
-    if (updates.length === 0) {
-      return this.findById(id);
-    }
-
-    values.push(id);
-    const stmt = db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`);
-    stmt.run(...values);
-
-    return this.findById(id);
   }
 
-  static updateLastLogin(id: string): void {
-    const stmt = db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?');
-    stmt.run(Date.now(), id);
+  static async verifyEmail(id: string): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: {
+        email_verified: 1,
+        email_verified_at: Date.now(),
+        verification_token: null,
+        verification_token_expires_at: null,
+      },
+    });
   }
 
-  static delete(id: string): boolean {
-    const stmt = db.prepare('DELETE FROM users WHERE id = ?');
-    const result = stmt.run(id);
-    return result.changes > 0;
+  static async delete(id: string): Promise<boolean> {
+    try {
+      await prisma.user.delete({ where: { id } });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  static countByOrganization(organizationId: string): number {
-    const stmt = db.prepare('SELECT COUNT(*) as count FROM users WHERE organization_id = ?');
-    const result = stmt.get(organizationId) as { count: number };
-    return result.count;
+  static async countByOrganization(organizationId: string): Promise<number> {
+    return prisma.user.count({ where: { organization_id: organizationId } });
   }
 }

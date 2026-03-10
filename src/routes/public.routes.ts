@@ -17,7 +17,7 @@ router.get('/forms/:slug', async (req: Request, res: Response) => {
     const { slug } = req.params;
 
     // Find published form by slug
-    const form = FormModel.findPublishedBySlug(slug);
+    const form = await FormModel.findPublishedBySlug(slug);
 
     if (!form) {
       return res.status(404).json({ error: 'Form not found' });
@@ -87,10 +87,10 @@ router.get('/forms/:slug/draft/:sessionId', async (req: Request, res: Response) 
 
     res.json({
       id: draft.id,
-      formId: draft.formId,
-      submissionData: draft.submissionData,
-      currentStep: draft.currentStep,
-      expiresAt: draft.expiresAt,
+      form_id: draft.formId,
+      submission_data: draft.submissionData,
+      current_step: draft.currentStep,
+      expires_at: draft.expiresAt,
     });
   } catch (error) {
     console.error('Load draft error:', error);
@@ -108,7 +108,7 @@ router.post('/forms/:slug/submit', async (req: Request, res: Response) => {
     const { submission_data, session_id } = req.body;
 
     // Find form
-    const form = FormModel.findPublishedBySlug(slug);
+    const form = await FormModel.findPublishedBySlug(slug);
 
     if (!form) {
       return res.status(404).json({ error: 'Form not found' });
@@ -134,7 +134,7 @@ router.post('/forms/:slug/submit', async (req: Request, res: Response) => {
     };
 
     // Create submission
-    const submission = FormSubmissionModel.create({
+    const submission = await FormSubmissionModel.create({
       form_id: form.id,
       organization_id: form.organization_id,
       submission_data: sanitizedData,
@@ -144,9 +144,9 @@ router.post('/forms/:slug/submit', async (req: Request, res: Response) => {
 
     // Delete draft if exists
     if (session_id) {
-      const draft = DraftSubmissionModel.findByFormAndSession(form.id, session_id);
+      const draft = await DraftSubmissionModel.findByFormAndSession(form.id, session_id);
       if (draft) {
-        DraftSubmissionModel.delete(draft.id);
+        await DraftSubmissionModel.delete(draft.id);
       }
     }
 
@@ -167,7 +167,7 @@ router.post('/forms/:slug/schema', async (req: Request, res: Response) => {
     const { submission_data } = req.body;
 
     // Find form
-    const form = FormModel.findPublishedBySlug(slug);
+    const form = await FormModel.findPublishedBySlug(slug);
 
     if (!form) {
       return res.status(404).json({ error: 'Form not found' });

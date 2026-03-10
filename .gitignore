@@ -68,3 +68,5 @@ pnpm-lock.yaml
 
 # Windows device files
 nul
+
+/src/generated/prisma

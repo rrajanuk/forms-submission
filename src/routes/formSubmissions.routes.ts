@@ -29,7 +29,7 @@ const requirePublishedForm = async (req: Request, res: Response, next: Function)
     return res.status(400).json({ error: 'Form ID required' });
   }
 
-  const form = FormModel.findById(formId);
+  const form = await FormModel.findById(formId);
   if (!form) {
     return res.status(404).json({ error: 'Form not found' });
   }
@@ -45,14 +45,14 @@ const requirePublishedForm = async (req: Request, res: Response, next: Function)
 /**
  * Middleware to verify form belongs to user's organization
  */
-const requireFormAccess = (req: Request, res: Response, next: Function) => {
+const requireFormAccess = async (req: Request, res: Response, next: Function) => {
   const user = (req as any).user;
   const apiKeyUser = (req as any).apiKeyUser;
   const formId = req.params.formId;
 
   const userOrgId = user?.organization_id || apiKeyUser?.organization_id;
 
-  const form = FormModel.findById(formId);
+  const form = await FormModel.findById(formId);
   if (!form) {
     return res.status(404).json({ error: 'Form not found' });
   }
@@ -78,10 +78,10 @@ router.get('/:formId/submissions', requireJwt, requireFormAccess, async (req: Re
 
     let submissions;
     if (status) {
-      submissions = FormSubmissionModel.findByStatus(status, limit, offset)
-        .filter(s => s.form_id === form.id);
+      const allSubmissions = await FormSubmissionModel.findByStatus(status, 1000, 0);
+      submissions = allSubmissions.filter((s: any) => s.form_id === form.id).slice(0, limit);
     } else {
-      submissions = FormSubmissionModel.findByForm(form.id, limit, offset);
+      submissions = await FormSubmissionModel.findByForm(form.id, limit, offset);
     }
 
     res.json(submissions);
@@ -100,7 +100,7 @@ router.get('/:formId/submissions/:id', requireJwt, requireFormAccess, async (req
     const { id } = req.params;
     const { form } = req as any;
 
-    const submission = FormSubmissionModel.findById(id);
+    const submission = await FormSubmissionModel.findById(id);
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
@@ -159,14 +159,14 @@ router.post('/:formId/submissions', requirePublishedForm, async (req: Request, r
     } else if (apiKey) {
       // API key submission
       const { ApiKeyModel } = require('../models/apiKey.model');
-      const apiKeyData = ApiKeyModel.validate(apiKey);
+      const apiKeyData = await ApiKeyModel.validate(apiKey);
       if (apiKeyData) {
         submissionMetadata.api_key_id = apiKeyData.id;
       }
     }
 
     // Create submission
-    const submission = FormSubmissionModel.create({
+    const submission = await FormSubmissionModel.create({
       form_id: form.id,
       organization_id: form.organization_id,
       submission_data: sanitizedData,
@@ -176,9 +176,9 @@ router.post('/:formId/submissions', requirePublishedForm, async (req: Request, r
 
     // Delete draft if exists
     if (session_id) {
-      const draft = DraftSubmissionModel.findByFormAndSession(form.id, session_id);
+      const draft = await DraftSubmissionModel.findByFormAndSession(form.id, session_id);
       if (draft) {
-        DraftSubmissionModel.delete(draft.id);
+        await DraftSubmissionModel.delete(draft.id);
       }
     }
 
@@ -199,7 +199,7 @@ router.put('/:formId/submissions/:id', requireJwt, requireFormAccess, async (req
     const { submission_data, status } = req.body;
     const { form } = req as any;
 
-    const submission = FormSubmissionModel.findById(id);
+    const submission = await FormSubmissionModel.findById(id);
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
@@ -222,7 +222,7 @@ router.put('/:formId/submissions/:id', requireJwt, requireFormAccess, async (req
     const sanitizedData = submission_data ? sanitizeFieldValue(submission_data) : undefined;
 
     // Update submission
-    const updated = FormSubmissionModel.update(id, {
+    const updated = await FormSubmissionModel.update(id, {
       submission_data: sanitizedData,
       status,
     });
@@ -243,7 +243,7 @@ router.delete('/:formId/submissions/:id', requireJwt, requireFormAccess, async (
     const { id } = req.params;
     const { form } = req as any;
 
-    const submission = FormSubmissionModel.findById(id);
+    const submission = await FormSubmissionModel.findById(id);
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
@@ -252,7 +252,7 @@ router.delete('/:formId/submissions/:id', requireJwt, requireFormAccess, async (
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const deleted = FormSubmissionModel.delete(id);
+    const deleted = await FormSubmissionModel.delete(id);
     if (!deleted) {
       return res.status(404).json({ error: 'Submission not found' });
     }
@@ -273,7 +273,7 @@ router.get('/:formId/submissions/export', requireJwt, requireFormAccess, async (
     const { form } = req as any;
     const format = req.query.format as string || 'csv';
 
-    const submissions = FormSubmissionModel.findByForm(form.id, 1000, 0);
+    const submissions = await FormSubmissionModel.findByForm(form.id, 1000, 0);
 
     if (format === 'json') {
       res.json(submissions);
@@ -284,7 +284,7 @@ router.get('/:formId/submissions/export', requireJwt, requireFormAccess, async (
     const fields = form.schema.fields;
     const headers = ['Submitted At', ...fields.map((f: FormField) => f.label || f.id)];
 
-    const rows = submissions.map(sub => {
+    const rows = submissions.map((sub: any) => {
       const row = [new Date(sub.submitted_at || sub.created_at).toISOString()];
       fields.forEach((field: FormField) => {
         const value = sub.submission_data[field.id];
@@ -300,7 +300,7 @@ router.get('/:formId/submissions/export', requireJwt, requireFormAccess, async (
     });
 
     const csv = [headers, ...rows]
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .map((row: any) => row.map((cell: any) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
 
     res.setHeader('Content-Type', 'text/csv');
