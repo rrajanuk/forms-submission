@@ -1,14 +1,12 @@
 import dotenv from 'dotenv';
 import app from './app';
-// import { runMigrations as migrate } from './db/migrate'; // Disabled after Prisma migration
-import { IdempotencyModel } from './models/idempotency.model';
-import { AutoSaveService } from './services/autoSave.service';
+import prisma from './lib/prisma';
 
 // Load environment variables
 dotenv.config();
 
 // Validate required environment variables
-const requiredEnvVars = ['ADMIN_API_KEY', 'JWT_SECRET'];
+const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'REFRESH_TOKEN_SECRET'];
 const missing = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
 if (missing.length > 0) {
@@ -17,73 +15,60 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-// Run database migrations
-// NOTE: Old SQL migrations disabled after Prisma migration
-// try {
-//   migrate();
-// } catch (error) {
-//   console.error('Migration failed:', error);
-//   process.exit(1);
-// }
-
-// Cleanup old idempotency keys on startup (older than 7 days)
-const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-
-async function startup() {
-  const cleaned = await IdempotencyModel.cleanup(SEVEN_DAYS);
-  console.log(`Cleaned up ${cleaned} old idempotency keys`);
-
-  // Cleanup expired drafts on startup
-  const draftCleanup = await AutoSaveService.cleanupExpiredDrafts();
-  console.log(`Cleaned up ${draftCleanup.count} expired drafts`);
-}
-
-startup().catch(error => {
-  console.error('Startup failed:', error);
-  process.exit(1);
-});
-
-// Schedule periodic cleanup (every 24 hours)
-setInterval(async () => {
-  const cleaned = await IdempotencyModel.cleanup(SEVEN_DAYS);
-  if (cleaned > 0) {
-    console.log(`Cleaned up ${cleaned} old idempotency keys`);
-  }
-
-  const draftCleaned = await AutoSaveService.cleanupExpiredDrafts();
-  if (draftCleaned.count > 0) {
-    console.log(`Cleaned up ${draftCleaned.count} expired drafts`);
-  }
-}, 24 * 60 * 60 * 1000);
-
 // Start server
-const PORT = parseInt(process.env.PORT || '3001');
-const server = app.listen(PORT, () => {
+const PORT = parseInt(process.env.PORT || '4000');
+const HOST = process.env.HOST || '127.0.0.1';
+
+const server = app.listen(PORT, HOST, () => {
   console.log(`
 🚀 Form Submission API Server Started
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Environment: ${process.env.NODE_ENV || 'development'}
+Host: ${HOST}
 Port: ${PORT}
-Health Check: http://localhost:${PORT}/health
-API Endpoint: http://localhost:${PORT}/api/submissions
+Health Check: http://${HOST}:${PORT}/health
+API Endpoint: http://${HOST}:${PORT}/api
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   `);
 });
 
 // Graceful shutdown
-const shutdown = () => {
-  console.log('\nShutting down gracefully...');
-  server.close(() => {
-    console.log('Server closed');
+const shutdown = async () => {
+  console.log('\n🔄 Shutting down gracefully...');
+
+  // Stop accepting new connections
+  server.close(async () => {
+    console.log('✅ HTTP server closed');
+
+    try {
+      // Disconnect Prisma
+      await prisma.$disconnect();
+      console.log('✅ Database connection closed');
+    } catch (error) {
+      console.error('❌ Error disconnecting from database:', error);
+    }
+
+    console.log('✅ Shutdown complete');
     process.exit(0);
   });
 
   // Force shutdown after 10 seconds
   setTimeout(() => {
-    console.error('Forced shutdown');
+    console.error('❌ Forced shutdown after timeout');
     process.exit(1);
   }, 10000);
 };
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+// Handle uncaught errors
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  shutdown();
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  shutdown();
+});

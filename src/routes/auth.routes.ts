@@ -1,143 +1,51 @@
 import { Router, Request, Response } from 'express';
-import { OrganizationModel } from '../models/organization.model';
-import { UserModel } from '../models/user.model';
-import { RefreshTokenModel } from '../models/refreshToken.model';
-import { ApiKeyModel } from '../models/apiKey.model';
-import { generateAccessToken, verifyToken } from '../utils/jwt';
-import { comparePassword } from '../utils/password';
-import { RegisterRequest, LoginRequest, RefreshRequest, AuthResponse } from '../types/auth';
-import { sendVerificationEmail } from '../services/email.service';
+import { AuthService } from '../services/auth.service';
+import { requireJwt } from '../middleware/auth';
+import { RegisterRequest, LoginRequest, RefreshRequest } from '../types/auth';
 
 const router = Router();
 
 /**
- * Helper to generate slug from organization name
- */
-async function generateSlug(name: string): Promise<string> {
-  const base = name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-');
-
-  let slug = base;
-  let counter = 1;
-
-  // Ensure slug is unique
-  while (await OrganizationModel.findBySlug(slug)) {
-    slug = `${base}-${counter}`;
-    counter++;
-  }
-
-  return slug;
-}
-
-/**
  * POST /api/auth/register
- * Register a new organization and user
+ * Register a new user
  */
 router.post('/register', async (req: Request, res: Response) => {
   try {
     const data: RegisterRequest = req.body;
 
     // Validation
-    if (!data.organization_name || !data.email || !data.password) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!data.email || !data.password) {
+      return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(data.email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Password validation
     if (data.password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
-    // Check if user already exists
-    const existingUser = await UserModel.findByEmail(data.email);
-    if (existingUser) {
-      return res.status(409).json({ error: 'Email already registered' });
-    }
+    const result = await AuthService.register(data);
 
-    // Check if slug is taken
-    const slug = data.organization_slug || await generateSlug(data.organization_name);
-
-    const existingOrg = await OrganizationModel.findBySlug(slug);
-    if (existingOrg) {
-      return res.status(409).json({ error: 'Organization slug already taken' });
-    }
-
-    // Create organization
-    const organization = await OrganizationModel.create({
-      name: data.organization_name,
-      slug,
-      plan: 'free',
-    });
-
-    // Create user with verification token
-    const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
-    const { user } = await UserModel.createWithVerificationToken({
-      organization_id: organization.id,
-      email: data.email,
-      password: data.password,
-      name: data.name,
-      role: 'owner',
-    }, verificationToken, expiresAt);
-
-    // Generate tokens
-    const accessToken = generateAccessToken({
-      sub: user.id,
-      email: user.email,
-      organization_id: user.organization_id,
-      role: user.role,
-    });
-
-    const refreshToken = await RefreshTokenModel.create(user.id);
-
-    // Create default API key for convenience
-    const { rawKey } = await ApiKeyModel.create({
-      user_id: user.id,
-      organization_id: organization.id,
-      name: 'Default API Key',
-      scopes: ['forms:read', 'forms:write', 'submissions:read'],
-    });
-
-    const response: AuthResponse = {
-      user,
-      tokens: {
-        accessToken,
-        refreshToken: refreshToken.token,
-        expiresIn: 15 * 60, // 15 minutes in seconds
-      },
-      organization,
-    };
-
-    // Include the raw API key in the response (only shown once)
-    (response as any).apiKey = rawKey;
-
-    // Send verification email
-    const emailResult = await sendVerificationEmail(
-      user.email,
-      user.name || user.email.split('@')[0],
-      verificationToken
-    );
-
-    if (emailResult.success) {
-      // Don't include token in response if email was sent successfully
-    } else {
-      // Include token in response as fallback if email failed
-      if (emailResult.fallbackToken) {
-        (response as any).verificationToken = verificationToken;
-      }
-    }
-
-    res.status(201).json(response);
+    res.status(201).json(result);
   } catch (error) {
-    console.error('Registration error:', error);
+    if (error instanceof Error) {
+      if (error.message === 'A user with this email already exists') {
+        return res.status(409).json({ error: error.message });
+      }
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 /**
  * POST /api/auth/login
- * Login with email and password
+ * Login user
  */
 router.post('/login', async (req: Request, res: Response) => {
   try {
@@ -148,64 +56,23 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Find user
-    const user = await UserModel.findByEmailWithPassword(data.email);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    const result = await AuthService.login(data);
 
-    // Verify password
-    if (!comparePassword(data.password, user.password_hash)) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Get organization
-    const organization = await OrganizationModel.findById(user.organization_id);
-    if (!organization) {
-      return res.status(500).json({ error: 'Organization not found' });
-    }
-
-    // Update last login
-    await UserModel.updateLastLogin(user.id);
-
-    // Generate tokens
-    const accessToken = generateAccessToken({
-      sub: user.id,
-      email: user.email,
-      organization_id: user.organization_id,
-      role: user.role,
-    });
-
-    const refreshToken = await RefreshTokenModel.create(user.id);
-
-    const response: AuthResponse = {
-      user: {
-        id: user.id,
-        organization_id: user.organization_id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        created_at: user.created_at,
-        last_login_at: user.last_login_at,
-      },
-      tokens: {
-        accessToken,
-        refreshToken: refreshToken.token,
-        expiresIn: 15 * 60,
-      },
-      organization,
-    };
-
-    res.json(response);
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Login error:', error);
+    if (error instanceof Error) {
+      if (error.message === 'Invalid email or password') {
+        return res.status(401).json({ error: error.message });
+      }
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 /**
  * POST /api/auth/refresh
- * Refresh access token using refresh token
+ * Refresh access token
  */
 router.post('/refresh', async (req: Request, res: Response) => {
   try {
@@ -215,200 +82,60 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Refresh token is required' });
     }
 
-    // Find refresh token
-    const refreshToken = await RefreshTokenModel.findByToken(data.refreshToken);
-    if (!refreshToken) {
-      return res.status(401).json({ error: 'Invalid refresh token' });
-    }
+    const tokens = await AuthService.refresh(data.refreshToken);
 
-    // Check if token is valid
-    if (!RefreshTokenModel.isValid(refreshToken.token)) {
-      // Revoke the token
-      await RefreshTokenModel.revoke(data.refreshToken);
-      return res.status(401).json({ error: 'Refresh token expired or revoked' });
-    }
-
-    // Get user
-    const user = await UserModel.findByEmailWithPassword(refreshToken.user_id);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
-    // Get organization
-    const organization = await OrganizationModel.findById(user.organization_id);
-    if (!organization) {
-      return res.status(500).json({ error: 'Organization not found' });
-    }
-
-    // Generate new access token
-    const accessToken = generateAccessToken({
-      sub: user.id,
-      email: user.email,
-      organization_id: user.organization_id,
-      role: user.role,
-    });
-
-    res.json({
-      accessToken,
-      expiresIn: 15 * 60,
-    });
+    res.status(200).json(tokens);
   } catch (error) {
-    console.error('Token refresh error:', error);
+    if (error instanceof Error) {
+      if (error.message.includes('Invalid') || error.message.includes('not found') || error.message.includes('expired')) {
+        return res.status(401).json({ error: error.message });
+      }
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 /**
  * POST /api/auth/logout
- * Logout by revoking refresh token
+ * Logout user (revoke refresh token)
  */
 router.post('/logout', async (req: Request, res: Response) => {
   try {
-    const { refreshToken } = req.body;
+    const data: RefreshRequest = req.body;
 
-    if (refreshToken) {
-      await RefreshTokenModel.revoke(refreshToken);
+    if (!data.refreshToken) {
+      return res.status(400).json({ error: 'Refresh token is required' });
     }
 
-    res.json({ message: 'Logged out successfully' });
+    await AuthService.logout(data.refreshToken);
+
+    res.status(200).json({ message: 'Logged out successfully' });
   } catch (error) {
-    console.error('Logout error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 /**
- * POST /api/auth/me
- * Get current user info (requires auth)
+ * GET /api/auth/me
+ * Get current user (requires authentication)
  */
-router.post('/me', async (req: Request, res: Response) => {
+router.get('/me', requireJwt, async (req: Request, res: Response) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
+    const userId = req.userId;
+
+    if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const token = authHeader.substring(7);
-    const payload = verifyToken(token);
+    const user = await AuthService.findUserById(userId);
 
-    if (!payload) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
-    const user = await UserModel.findById(payload.sub);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const organization = await OrganizationModel.findById(user.organization_id);
-    if (!organization) {
-      return res.status(404).json({ error: 'Organization not found' });
-    }
-
-    res.json({
-      user,
-      organization,
-    });
+    res.status(200).json({ user });
   } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * POST /api/auth/verify-email
- * Verify email with token
- */
-router.post('/verify-email', async (req: Request, res: Response) => {
-  try {
-    const { token } = req.body;
-
-    if (!token) {
-      return res.status(400).json({ error: 'Verification token is required' });
-    }
-
-    const user = await UserModel.findByVerificationToken(token);
-    if (!user) {
-      return res.status(404).json({ error: 'Invalid verification token' });
-    }
-
-    // Check if token has expired
-    if ((user as any).verification_token_expires_at && (user as any).verification_token_expires_at < Date.now()) {
-      return res.status(400).json({ error: 'Verification token has expired' });
-    }
-
-    // Verify email
-    await UserModel.verifyEmail(user.id);
-
-    res.json({
-      message: 'Email verified successfully',
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        emailVerified: true,
-      },
-    });
-  } catch (error) {
-    console.error('Email verification error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * POST /api/auth/resend-verification
- * Resend verification email (requires auth)
- */
-router.post('/resend-verification', async (req: Request, res: Response) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const token = authHeader.substring(7);
-    const payload = verifyToken(token);
-
-    if (!payload) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
-    const user = await UserModel.findById(payload.sub);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Check if already verified
-    if (user.email_verified) {
-      return res.status(400).json({ error: 'Email is already verified' });
-    }
-
-    // Generate new verification token
-    const verificationToken = require('crypto').randomBytes(32).toString('hex');
-    const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
-    await UserModel.setVerificationToken(user.id, verificationToken, expiresAt);
-
-    // Send verification email
-    const emailResult = await sendVerificationEmail(
-      user.email,
-      user.name || user.email.split('@')[0],
-      verificationToken
-    );
-
-    if (emailResult.success) {
-      res.json({
-        message: 'Verification email sent! Please check your inbox.',
-      });
-    } else {
-      // Include token in response as fallback if email failed
-      res.json({
-        message: 'Verification email resent! Please check your inbox.',
-        // Include token only if email sending failed
-        ...(emailResult.fallbackToken && { verificationToken: emailResult.fallbackToken }),
-      });
-    }
-  } catch (error) {
-    console.error('Resend verification error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

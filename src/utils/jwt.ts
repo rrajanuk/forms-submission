@@ -18,7 +18,9 @@ export function generateAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): s
  * Generate a refresh token for a user
  */
 export function generateRefreshToken(userId: string): string {
-  return jwt.sign({ sub: userId }, JWT_SECRET, {
+  // Add a unique identifier (jti) to ensure each token is unique
+  const jti = Math.random().toString(36).substring(2) + Date.now().toString(36);
+  return jwt.sign({ sub: userId, jti }, JWT_SECRET, {
     expiresIn: JWT_REFRESH_EXPIRES_IN,
   } as any);
 }

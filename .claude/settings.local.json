@@ -32,7 +32,17 @@
       "Bash(git push:*)",
       "Bash(git pull:*)",
       "Bash(timeout:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(cmd //c \"taskkill /PID 14292 /F\")",
+      "Bash(tasklist)",
+      "Bash(cmd //c \"taskkill /IM node.exe /F\")",
+      "Bash(cmd //c \"taskkill /PID 4272 /F\")",
+      "Skill(glm-plan-usage:usage-query)",
+      "Bash(npx prisma:*)",
+      "Bash(echo {\\\\\"prisma_version\\\\\":\\\\\"5.22.0\\\\\",\\\\\"jasper_version\\\\\":\\\\\"0.5.0\\\\\",\\\\\"migration_name\\\\\":\\\\\"20240101000000_init\\\\\",\\\\\"revision\\\\\":\\\\\" \\\\\"}:*)",
+      "Bash(cd prisma:*)",
+      "Bash(cd:*)",
+      "Bash(node:*)"
     ]
   }
 }

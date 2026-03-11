@@ -2,77 +2,19 @@
  * Authentication and Authorization Types
  */
 
-export interface Organization {
-  id: string;
-  name: string;
-  slug: string;
-  plan: 'free' | 'pro' | 'enterprise';
-  created_at: number;
-  updated_at: number;
-}
-
-export interface UserCreate {
-  organization_id: string;
-  email: string;
-  password: string;
-  name?: string;
-  role?: 'owner' | 'admin' | 'member';
-}
-
 export interface User {
   id: string;
-  organization_id: string;
   email: string;
   name?: string;
-  role: 'owner' | 'admin' | 'member';
-  created_at: number;
-  last_login_at?: number;
-  email_verified?: number;
-  email_verified_at?: number;
-}
-
-export interface UserWithPassword extends User {
-  password_hash: string;
-  email_verified?: number;
-  email_verified_at?: number;
-  verification_token?: string;
-  verification_token_expires_at?: number;
-}
-
-export interface ApiKey {
-  id: string;
-  user_id: string;
-  organization_id: string;
-  key_hash: string;
-  name?: string;
-  scopes: string[];
-  last_used_at?: number;
-  expires_at?: number;
-  created_at: number;
-}
-
-export interface ApiKeyCreate {
-  user_id: string;
-  organization_id: string;
-  name?: string;
-  scopes: string[];
-  expires_at?: number;
-}
-
-export interface RefreshToken {
-  id: string;
-  user_id: string;
-  token: string;
-  expires_at: number;
-  created_at: number;
-  revoked_at?: number;
+  emailVerified: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  lastLoginAt?: Date;
 }
 
 export interface JwtPayload {
   sub: string; // user_id
   email: string;
-  organization_id: string;
-  role: string;
   iat?: number;
   exp?: number;
 }
@@ -84,8 +26,6 @@ export interface AuthTokens {
 }
 
 export interface RegisterRequest {
-  organization_name: string;
-  organization_slug?: string;
   email: string;
   password: string;
   name?: string;
@@ -101,7 +41,6 @@ export interface RefreshRequest {
 }
 
 export interface AuthResponse {
-  user: Omit<User, 'password_hash'>;
+  user: User;
   tokens: AuthTokens;
-  organization: Organization;
 }
